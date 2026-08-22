@@ -2,3 +2,5 @@ packages:
   - "apps/*"
   - "packages/*"
   - "infra"
+allowBuilds:
+  unrs-resolver: set this to true or false
