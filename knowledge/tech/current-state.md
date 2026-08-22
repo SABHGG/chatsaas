@@ -29,8 +29,8 @@ resources are not part of the initial architecture.
 
 - [deferred] Which AWS services will provide AI inference, document ingestion, retrieval, hosting,
   and observability?
-- [resolved] Company user authentication will use Auth0 for the MVP. Users self-register and 
-  chatSaaS accounts are created automatically without manual intervention.
+- [resolved] Company user authentication will use Amazon Cognito User Pools for the MVP. Users 
+  self-register and chatSaaS accounts are created automatically without manual intervention.
 - [deferred] Which cost reporting method and resource tags reliably attribute monthly usage to a
   company and chatbot?
 - [deferred] What numeric limits and enforcement behavior apply to monthly conversations, chatbot

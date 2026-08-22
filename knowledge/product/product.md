@@ -16,7 +16,7 @@ iframe.
 
 ## User journeys
 
-1. A company user registers with Auth0 and accesses their chatSaaS dashboard.
+1. A company user registers with Amazon Cognito and accesses their chatSaaS dashboard.
 2. The company user creates a chatbot and uploads company documents.
 3. The product prepares the chatbot to answer questions using those documents while supporting
    general conversation.

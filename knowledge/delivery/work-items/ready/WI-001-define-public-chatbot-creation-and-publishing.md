@@ -55,7 +55,7 @@ impact_analysis:
       reason: "AWS connection and deployment configuration are central to the product promise."
     authentication:
       status: affected
-      reason: "Company user authentication uses Auth0; users self-register and chatSaaS accounts are created automatically."
+      reason: "Company user authentication uses Amazon Cognito User Pools; users self-register and chatSaaS accounts are created automatically."
     notifications:
       status: not-applicable
     analytics:
@@ -84,6 +84,8 @@ refined_by: work-item-agent
 A company user (the person who subscribed to chatSaaS) creates a public chatbot from company 
 documents and receives a public URL and iframe embed option so website visitors can ask questions.
 
+**Note:** Company users authenticate via Amazon Cognito User Pools with self-service registration.
+
 ## Current Behavior
 
 No product or public chatbot creation flow exists.
@@ -102,7 +104,7 @@ with an iframe.
 
 ## End-to-End Flow
 
-1. A company user registers with Auth0, creating their chatSaaS account.
+1. A company user registers with Amazon Cognito, creating their chatSaaS account.
 2. The company user creates a chatbot and uploads company documents.
 3. The product prepares the chatbot for document-grounded conversations.
 4. The company user publishes the chatbot and receives a public URL and iframe snippet.
@@ -120,7 +122,7 @@ manually configuring AWS.
 
 ## Acceptance Criteria
 
-- [ ] A company user can register with Auth0 and access their chatSaaS dashboard.
+- [ ] A company user can register with Amazon Cognito and access their chatSaaS dashboard.
 - [ ] A company user can create a chatbot intended for public website visitors.
 - [ ] The chatbot accepts company documents uploaded by the company user as its knowledge source.
 - [ ] The chatbot supports document-grounded questions and general conversation.
