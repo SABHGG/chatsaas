@@ -49,7 +49,7 @@ Use a **TypeScript full-stack** with AWS-native services and serverless architec
 ### Backend
 
 **Runtime:**
-- Node.js 20.x on AWS Lambda
+- Node.js 22.x on AWS Lambda (LTS, EOL 2029)
 - TypeScript compiled to ESM
 
 **API:**
