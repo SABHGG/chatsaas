@@ -1,0 +1,583 @@
+{
+  "version": "1",
+  "generatedAt": "2026-08-22T21:22:12.840Z",
+  "project": {
+    "name": "chatSaaS",
+    "state": "new",
+    "teamSize": "indie",
+    "structure": "monorepo",
+    "language": "English"
+  },
+  "scan": {
+    "available": false,
+    "languages": [],
+    "frameworks": [],
+    "packageManagers": [],
+    "sourceDirectories": [],
+    "migrationDirectories": [],
+    "contractFiles": [],
+    "infrastructureFiles": []
+  },
+  "knowledge": {
+    "summary": "> What is true about this product right now.",
+    "roadmapSummary": "Initiatives and Work Items below are candidates for human review, not implementation commitments.",
+    "inventoryAvailable": false,
+    "workItems": [
+      {
+        "id": "WI-001",
+        "type": "feature",
+        "title": "Define public chatbot creation and publishing",
+        "status": "draft",
+        "lifecycle": "draft",
+        "knowledgeLevel": "K2",
+        "domains": [
+          "Public Chatbot Delivery"
+        ],
+        "source": {
+          "type": "roadmap",
+          "id": "WI-CANDIDATE-001",
+          "title": "Define the first public chatbot creation and publishing experience",
+          "context": "Materialized from roadmap candidate WI-CANDIDATE-001 under initiative RM-001.",
+          "inferred": false
+        },
+        "scopeConfidence": {
+          "level": "low",
+          "reasons": [
+            "The user-visible MVP outcome is clear, but AWS architecture and cost attribution remain undecided."
+          ]
+        },
+        "moduleCoverage": {
+          "agents": {
+            "status": "reviewed-not-affected",
+            "reason": "The existing module contains Kaddo agent guidance, not product code."
+          }
+        },
+        "impactAnalysis": {
+          "frontend": {
+            "status": "unknown",
+            "question": "What company administration and public chat surfaces are required?"
+          },
+          "backend": {
+            "status": "unknown",
+            "question": "What orchestration and conversation services are required?"
+          },
+          "database": {
+            "status": "unknown",
+            "question": "What data must be retained for companies, documents, agents, and conversations?"
+          },
+          "configuration": {
+            "status": "affected",
+            "reason": "AWS connection and deployment configuration are central to the product promise."
+          },
+          "authentication": {
+            "status": "affected",
+            "reason": "Company user authentication uses Auth0; users self-register and chatSaaS accounts are created automatically."
+          },
+          "notifications": {
+            "status": "not-applicable"
+          },
+          "analytics": {
+            "status": "unknown",
+            "question": "What usage and answer-quality signals are needed for MVP validation?"
+          },
+          "documentation": {
+            "status": "affected",
+            "reason": "Companies need instructions to use the public URL and iframe embed."
+          },
+          "operations": {
+            "status": "unknown",
+            "question": "What deployment, monitoring, and support model is required?"
+          }
+        }
+      }
+    ],
+    "activeWorkItems": [
+      {
+        "id": "WI-001",
+        "type": "feature",
+        "title": "Define public chatbot creation and publishing",
+        "status": "draft",
+        "lifecycle": "draft",
+        "knowledgeLevel": "K2",
+        "domains": [
+          "Public Chatbot Delivery"
+        ],
+        "source": {
+          "type": "roadmap",
+          "id": "WI-CANDIDATE-001",
+          "title": "Define the first public chatbot creation and publishing experience",
+          "context": "Materialized from roadmap candidate WI-CANDIDATE-001 under initiative RM-001.",
+          "inferred": false
+        },
+        "scopeConfidence": {
+          "level": "low",
+          "reasons": [
+            "The user-visible MVP outcome is clear, but AWS architecture and cost attribution remain undecided."
+          ]
+        },
+        "moduleCoverage": {
+          "agents": {
+            "status": "reviewed-not-affected",
+            "reason": "The existing module contains Kaddo agent guidance, not product code."
+          }
+        },
+        "impactAnalysis": {
+          "frontend": {
+            "status": "unknown",
+            "question": "What company administration and public chat surfaces are required?"
+          },
+          "backend": {
+            "status": "unknown",
+            "question": "What orchestration and conversation services are required?"
+          },
+          "database": {
+            "status": "unknown",
+            "question": "What data must be retained for companies, documents, agents, and conversations?"
+          },
+          "configuration": {
+            "status": "affected",
+            "reason": "AWS connection and deployment configuration are central to the product promise."
+          },
+          "authentication": {
+            "status": "affected",
+            "reason": "Company user authentication uses Auth0; users self-register and chatSaaS accounts are created automatically."
+          },
+          "notifications": {
+            "status": "not-applicable"
+          },
+          "analytics": {
+            "status": "unknown",
+            "question": "What usage and answer-quality signals are needed for MVP validation?"
+          },
+          "documentation": {
+            "status": "affected",
+            "reason": "Companies need instructions to use the public URL and iframe embed."
+          },
+          "operations": {
+            "status": "unknown",
+            "question": "What deployment, monitoring, and support model is required?"
+          }
+        }
+      }
+    ],
+    "completedWorkItems": [],
+    "archivedWorkItems": [],
+    "allWorkItems": [
+      {
+        "id": "WI-001",
+        "type": "feature",
+        "title": "Define public chatbot creation and publishing",
+        "status": "draft",
+        "lifecycle": "draft",
+        "knowledgeLevel": "K2",
+        "domains": [
+          "Public Chatbot Delivery"
+        ],
+        "source": {
+          "type": "roadmap",
+          "id": "WI-CANDIDATE-001",
+          "title": "Define the first public chatbot creation and publishing experience",
+          "context": "Materialized from roadmap candidate WI-CANDIDATE-001 under initiative RM-001.",
+          "inferred": false
+        },
+        "scopeConfidence": {
+          "level": "low",
+          "reasons": [
+            "The user-visible MVP outcome is clear, but AWS architecture and cost attribution remain undecided."
+          ]
+        },
+        "moduleCoverage": {
+          "agents": {
+            "status": "reviewed-not-affected",
+            "reason": "The existing module contains Kaddo agent guidance, not product code."
+          }
+        },
+        "impactAnalysis": {
+          "frontend": {
+            "status": "unknown",
+            "question": "What company administration and public chat surfaces are required?"
+          },
+          "backend": {
+            "status": "unknown",
+            "question": "What orchestration and conversation services are required?"
+          },
+          "database": {
+            "status": "unknown",
+            "question": "What data must be retained for companies, documents, agents, and conversations?"
+          },
+          "configuration": {
+            "status": "affected",
+            "reason": "AWS connection and deployment configuration are central to the product promise."
+          },
+          "authentication": {
+            "status": "affected",
+            "reason": "Company user authentication uses Auth0; users self-register and chatSaaS accounts are created automatically."
+          },
+          "notifications": {
+            "status": "not-applicable"
+          },
+          "analytics": {
+            "status": "unknown",
+            "question": "What usage and answer-quality signals are needed for MVP validation?"
+          },
+          "documentation": {
+            "status": "affected",
+            "reason": "Companies need instructions to use the public URL and iframe embed."
+          },
+          "operations": {
+            "status": "unknown",
+            "question": "What deployment, monitoring, and support model is required?"
+          }
+        }
+      }
+    ],
+    "artifacts": []
+  },
+  "layers": [
+    {
+      "layer": "Business",
+      "status": "Consolidated",
+      "detected": [
+        "business.md"
+      ]
+    },
+    {
+      "layer": "Product",
+      "status": "Structured",
+      "detected": [
+        "capabilities.md",
+        "product.md"
+      ]
+    },
+    {
+      "layer": "Tech",
+      "status": "Weak",
+      "detected": [
+        "codebase.md",
+        "current-state.md",
+        "decision-candidates.md",
+        "knowledge.md",
+        "quality-attributes.md"
+      ]
+    },
+    {
+      "layer": "Delivery",
+      "status": "Traceable",
+      "detected": [
+        "WI-001-define-public-chatbot-creation-and-publishing.md",
+        "roadmap.md"
+      ]
+    }
+  ],
+  "knowledgeQuality": {
+    "business": {
+      "status": "Consolidated",
+      "artifacts": {
+        "knowledge/business/business.md": "useful"
+      }
+    },
+    "product": {
+      "status": "Structured",
+      "artifacts": {
+        "knowledge/product/product.md": "useful",
+        "knowledge/product/capabilities.md": "useful"
+      }
+    },
+    "tech": {
+      "status": "Weak",
+      "artifacts": {
+        "knowledge/tech/codebase.md": "weak",
+        "knowledge/tech/current-state.md": "useful"
+      }
+    },
+    "delivery": {
+      "status": "Traceable",
+      "artifacts": {
+        "knowledge/delivery/roadmap.md": "useful"
+      }
+    }
+  },
+  "roadmap": {
+    "present": true,
+    "initiatives": 1,
+    "work_item_candidates": 1,
+    "materialized_work_items": 1,
+    "remaining_work_item_candidates": 0,
+    "candidates": 1,
+    "materialized": 1,
+    "remaining": 0
+  },
+  "phase": {
+    "phase": "Knowledge Refinement",
+    "reasons": [
+      "Roadmap available",
+      "1 materialized work item(s)",
+      "draft: 1",
+      "Ownership coverage 0%"
+    ],
+    "recommendedAgents": [
+      "architecture-agent"
+    ],
+    "nextStep": "Run `kaddo add skills` to install reusable Kaddo skills.",
+    "llmInstructions": [
+      "The baseline files exist but still look like bootstrap placeholders.",
+      "Use the architecture-agent to replace the placeholders with real, project-specific knowledge.",
+      "Do not write code."
+    ]
+  },
+  "nextStepRecommendation": {
+    "id": "add-skills",
+    "phase": "Setup",
+    "label": "Run `kaddo add skills` to install reusable Kaddo skills.",
+    "command": "kaddo add skills",
+    "reason": "No Kaddo skills are installed yet."
+  },
+  "deliveryState": {
+    "phase": "Setup",
+    "draft_work_items": 1,
+    "refined_draft_work_items": 1,
+    "refined_draft_ids": [
+      "WI-001"
+    ],
+    "ready_work_items": 0,
+    "ready_work_item_ids": [],
+    "ready_multirepo_wi_ids": [],
+    "in_progress_work_items": 0,
+    "blocked_work_items": 0,
+    "total_work_items": 1,
+    "ownership_coverage": "0/1",
+    "remaining_work_item_candidates": 0,
+    "decision_candidates": 2,
+    "accepted_adrs": 0,
+    "adapters_installed": 1
+  },
+  "techDecisions": {
+    "status": "candidates",
+    "candidates": 2,
+    "adrs": 0,
+    "draft_adrs": 0,
+    "accepted_adrs": 0,
+    "candidate_list": [
+      {
+        "title": "DC-001: Tenant Isolation Model",
+        "source": "knowledge/tech/discovery/decision-candidates.md",
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-001-dc-001-tenant-isolation-model.md"
+      },
+      {
+        "title": "DC-002: Tenant Usage Metering and Subscription Limits",
+        "source": "knowledge/tech/discovery/decision-candidates.md",
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-002-dc-002-tenant-usage-metering-and-subscription-limits.md"
+      }
+    ],
+    "candidates_source": "knowledge/tech/discovery/decision-candidates.md",
+    "candidates_legacy_location": false,
+    "candidates_both_exist": false
+  },
+  "techKnowledge": {
+    "core": {
+      "current-state.md": true,
+      "codebase.md": true
+    },
+    "decisions": {
+      "adrs": 0,
+      "dir": true
+    },
+    "discovery": {
+      "architecture-notes.md": false,
+      "decision-candidates.md": true,
+      "legacyLocation": false
+    }
+  },
+  "roadmapQuality": {
+    "initiatives": {
+      "total": 1,
+      "grounded": 1,
+      "with_related_domain": 1,
+      "with_related_capability": 1,
+      "with_source_signals": 1,
+      "needs_refinement": false,
+      "items": [
+        {
+          "id": "RM-001",
+          "title": "Public Document-Grounded Chatbot",
+          "hasRelatedDomain": true,
+          "hasRelatedCapability": true,
+          "hasSourceSignals": true,
+          "grounded": true
+        }
+      ]
+    },
+    "work_item_candidates": {
+      "total": 1,
+      "with_source_initiative": 1,
+      "with_related_domain": 0,
+      "with_related_capability": 0
+    }
+  },
+  "installedAssets": {
+    "version": "3.68.0",
+    "agents": {
+      "total": 20,
+      "installed": 11,
+      "outdated": 0,
+      "unknown_version": 0,
+      "modified": 0
+    },
+    "skills": {
+      "total": 8,
+      "installed": 0,
+      "outdated": 0,
+      "unknown_version": 0,
+      "modified": 0
+    }
+  },
+  "workItemSummary": {
+    "total": 1,
+    "active": 1,
+    "draft": 1,
+    "ready": 0,
+    "in_progress": 0,
+    "blocked": 0,
+    "completed": 0,
+    "archived": 0,
+    "summary": "draft-only"
+  },
+  "deliveryMix": {
+    "feature": 1
+  },
+  "external": [],
+  "graph": null,
+  "graphHints": null,
+  "skills": [],
+  "scanSignals": null,
+  "projectRoute": {
+    "type": "new",
+    "currentStep": "refine-work-item",
+    "completed": 6,
+    "total": 12,
+    "progressPercent": 50,
+    "steps": [
+      {
+        "id": "enable-kaddo",
+        "label": "Enable Kaddo",
+        "status": "done",
+        "evidence": [
+          ".kaddo/config.yml"
+        ]
+      },
+      {
+        "id": "define-business",
+        "label": "Define business context",
+        "status": "done",
+        "evidence": [
+          "knowledge/business/business.md"
+        ]
+      },
+      {
+        "id": "define-product",
+        "label": "Define product context",
+        "status": "done",
+        "evidence": [
+          "knowledge/product/product.md"
+        ]
+      },
+      {
+        "id": "discover-capabilities",
+        "label": "Define initial capabilities",
+        "status": "done",
+        "evidence": [
+          "knowledge/product/capabilities.md"
+        ]
+      },
+      {
+        "id": "describe-architecture",
+        "label": "Define initial architecture",
+        "status": "pending",
+        "evidence": [
+          "knowledge/tech/current-state.md"
+        ],
+        "agent": "architecture-agent"
+      },
+      {
+        "id": "create-work-source",
+        "label": "Create initial work source",
+        "status": "done",
+        "evidence": [
+          "knowledge/delivery/roadmap.md"
+        ]
+      },
+      {
+        "id": "materialize-work-item",
+        "label": "Create first Work Item",
+        "status": "done",
+        "evidence": [
+          "knowledge/delivery/work-items/"
+        ]
+      },
+      {
+        "id": "refine-work-item",
+        "label": "Refine Work Item",
+        "status": "current",
+        "reason": "There is 1 draft Work Item and no Work Item is ready.",
+        "agent": "work-item-agent",
+        "skill": "work-item-refinement"
+      },
+      {
+        "id": "suggest-ownership",
+        "label": "Suggest ownership",
+        "status": "next",
+        "reason": "Ownership coverage is 0/1.",
+        "command": "kaddo owners suggest"
+      },
+      {
+        "id": "prepare-implementation",
+        "label": "Prepare implementation",
+        "status": "next"
+      },
+      {
+        "id": "run-guard",
+        "label": "Run guard",
+        "status": "pending"
+      },
+      {
+        "id": "capture-learning",
+        "label": "Capture learning",
+        "status": "pending"
+      }
+    ]
+  },
+  "metadataHealth": {
+    "findings": [],
+    "healthy": 6,
+    "drifted": 0
+  },
+  "mappedModules": [],
+  "moduleStatuses": {},
+  "affectedModuleContexts": {},
+  "isModuleRepo": false,
+  "missing": [
+    "Scan baseline missing. Run `kaddo scan` for better context.",
+    "No technical inventory found. Run `kaddo scan` to generate it.",
+    "2 technical decision candidate(s) not yet materialized as ADRs (run `kaddo adr`)."
+  ],
+  "handoff": {
+    "recommendedAgents": [
+      "architecture-agent"
+    ],
+    "nextSteps": [
+      "Run `kaddo add skills` to install reusable Kaddo skills."
+    ],
+    "instructions": [
+      "The baseline files exist but still look like bootstrap placeholders.",
+      "Use the architecture-agent to replace the placeholders with real, project-specific knowledge.",
+      "Do not write code."
+    ],
+    "operatingRules": [
+      "**Never run `git commit`, `git push` or `git merge` without explicit human confirmation.**",
+      "Never push or merge automatically — ever. Suggest a Conventional Commit message and wait.",
+      "When implementing a Work Item, create a branch FIRST (per the project Git strategy, `.kaddo/git.yml`, default `feature/<id>-<slug>`). Never work directly on `main`.",
+      "After significant changes run `kaddo scan`, `kaddo owners suggest` and `kaddo guard`, and update the affected knowledge (ADR / capabilities / current-state).",
+      "Kaddo itself never calls an LLM and never runs git — every git action is the human’s."
+    ]
+  }
+}
