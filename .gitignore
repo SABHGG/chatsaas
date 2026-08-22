@@ -4,8 +4,18 @@ dist/
 .turbo/
 *.log
 .DS_Store
+
+# Environment files
+.env
+.env.local
 .env*.local
+!.env.example
+!.env.local.example
+
+# CDK
 cdk.out/
+
+# Build outputs
 *.js
 *.d.ts
 !jest.config.js
