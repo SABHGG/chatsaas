@@ -88,6 +88,7 @@ Knowledge maturity — Business: Consolidated · Product: Structured · Tech: St
 
 ### Delivery — Traceable
 - ✓ WI-001-define-public-chatbot-creation-and-publishing.md
+- ✓ WI-002-define-backend-endpoints.md
 - ✓ roadmap.md
 
 ## Technical Inventory

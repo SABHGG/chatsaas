@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "generatedAt": "2026-08-24T23:25:45.720Z",
+  "generatedAt": "2026-08-24T23:52:44.820Z",
   "project": {
     "name": "chatSaaS",
     "state": "new",
@@ -281,6 +281,7 @@
       "status": "Traceable",
       "detected": [
         "WI-001-define-public-chatbot-creation-and-publishing.md",
+        "WI-002-define-backend-endpoints.md",
         "roadmap.md"
       ]
     }
