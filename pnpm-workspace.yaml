@@ -3,4 +3,4 @@ packages:
   - "packages/*"
   - "infra"
 allowBuilds:
-  unrs-resolver: set this to true or false
+  unrs-resolver: false

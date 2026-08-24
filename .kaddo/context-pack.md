@@ -20,24 +20,24 @@
 
 ## Current Phase
 
-Phase: Knowledge Refinement
+Phase: Active Delivery
 
 Reason:
 
 - Roadmap available
 - 1 materialized work item(s)
-- draft: 1
+- ready: 1
 - Ownership coverage 0%
 
-Recommended next: architecture-agent
+Recommended next: implementation-agent, kaddo owners suggest
 
 Next step: Run `kaddo add skills` to install reusable Kaddo skills.
 
 ## Delivery State
 
 - Phase: Setup
-- Draft Work Items: 1
-- Ready Work Items: 0
+- Draft Work Items: 0
+- Ready Work Items: 1
 - In-progress Work Items: 0
 - Ownership coverage: 0/1
 - Remaining Work Item candidates: 0
@@ -51,16 +51,16 @@ Next step: Run `kaddo add skills` to install reusable Kaddo skills.
 
 ## Project Route
 
-Route: new · Progress: 6/12
+Route: new · Progress: 8/12
 
 Current:
-- Refine Work Item — work-item-agent / work-item-refinement
+- Prepare implementation — implementation-agent
 
 ## Knowledge Layers
 
 Project knowledge is organized in four layers: **Business → Product → Tech → Delivery**.
 
-Knowledge maturity — Business: Consolidated · Product: Structured · Tech: Weak · Delivery: Traceable
+Knowledge maturity — Business: Consolidated · Product: Structured · Tech: Structured · Delivery: Traceable
 
 ### Business — Consolidated
 - ✓ business.md
@@ -69,9 +69,19 @@ Knowledge maturity — Business: Consolidated · Product: Structured · Tech: We
 - ✓ capabilities.md
 - ✓ product.md
 
-### Tech — Weak
+### Tech — Structured
+- ✓ 001-use-cognito-for-authentication.md
+- ✓ 002-use-pnpm-as-package-manager.md
+- ✓ 003-technology-stack-selection.md
+- ✓ 004-aws-service-selection-for-ai-capabilities.md
+- ✓ 005-cost-attribution-and-billing-mechanism.md
+- ✓ 006-data-partitioning-strategy-for-tenant-isolation.md
+- ✓ 007-visual-design-system.md
+- ✓ api-spec.md
+- ✓ architecture-notes.md
 - ✓ codebase.md
 - ✓ current-state.md
+- ✓ data-model.md
 - ✓ decision-candidates.md
 - ✓ knowledge.md
 - ✓ quality-attributes.md
@@ -82,7 +92,16 @@ Knowledge maturity — Business: Consolidated · Product: Structured · Tech: We
 
 ## Technical Inventory
 
-Scan baseline missing. Run `kaddo scan` for better context.
+- Language: javascript
+- Framework: unknown
+- Package manager: pnpm
+- Infrastructure:
+  - infra/
+
+## Scan Signals
+
+- Tests: No test directory detected
+- Infrastructure: infra/
 
 ## Current Knowledge
 
@@ -114,7 +133,7 @@ Work Item Candidates:
 
 ## Active Work Items
 
-- WI-001 [feature] [K2] (draft) — Define public chatbot creation and publishing · domains: Public Chatbot Delivery
+- WI-001 [feature] [K2] (ready) — Define public chatbot creation and publishing · domains: Public Chatbot Delivery
   - Source: roadmap · WI-CANDIDATE-001
 
 ## Delivery Mix
@@ -129,15 +148,14 @@ No artifacts declare code ownership yet.
 
 ## Missing Context
 
-- Scan baseline missing. Run `kaddo scan` for better context.
-- No technical inventory found. Run `kaddo scan` to generate it.
-- 2 technical decision candidate(s) not yet materialized as ADRs (run `kaddo adr`).
+_None — all expected context is present._
 
 ## Recommended Agent Handoff
 
-Recommended next for the **Knowledge Refinement** phase:
+Recommended next for the **Active Delivery** phase:
 
-1. architecture-agent
+1. implementation-agent
+2. kaddo owners suggest
 
 Next step:
 
@@ -145,6 +163,7 @@ Next step:
 
 ## Instructions for the LLM
 
-- The baseline files exist but still look like bootstrap placeholders.
-- Use the architecture-agent to replace the placeholders with real, project-specific knowledge.
-- Do not write code.
+- Use the implementation-agent.
+- Suggest a branch name only.
+- Do not run git commands.
+- Ownership is incomplete — propose `code:` globs (run `kaddo owners suggest`).

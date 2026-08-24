@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "generatedAt": "2026-08-22T21:22:12.840Z",
+  "generatedAt": "2026-08-24T23:25:45.720Z",
   "project": {
     "name": "chatSaaS",
     "state": "new",
@@ -9,26 +9,32 @@
     "language": "English"
   },
   "scan": {
-    "available": false,
-    "languages": [],
+    "available": true,
+    "languages": [
+      "javascript"
+    ],
     "frameworks": [],
-    "packageManagers": [],
+    "packageManagers": [
+      "pnpm"
+    ],
     "sourceDirectories": [],
     "migrationDirectories": [],
     "contractFiles": [],
-    "infrastructureFiles": []
+    "infrastructureFiles": [
+      "infra/"
+    ]
   },
   "knowledge": {
     "summary": "> What is true about this product right now.",
     "roadmapSummary": "Initiatives and Work Items below are candidates for human review, not implementation commitments.",
-    "inventoryAvailable": false,
+    "inventoryAvailable": true,
     "workItems": [
       {
         "id": "WI-001",
         "type": "feature",
         "title": "Define public chatbot creation and publishing",
-        "status": "draft",
-        "lifecycle": "draft",
+        "status": "ready",
+        "lifecycle": "ready",
         "knowledgeLevel": "K2",
         "domains": [
           "Public Chatbot Delivery"
@@ -71,7 +77,7 @@
           },
           "authentication": {
             "status": "affected",
-            "reason": "Company user authentication uses Auth0; users self-register and chatSaaS accounts are created automatically."
+            "reason": "Company user authentication uses Amazon Cognito User Pools; users self-register and chatSaaS accounts are created automatically."
           },
           "notifications": {
             "status": "not-applicable"
@@ -96,8 +102,8 @@
         "id": "WI-001",
         "type": "feature",
         "title": "Define public chatbot creation and publishing",
-        "status": "draft",
-        "lifecycle": "draft",
+        "status": "ready",
+        "lifecycle": "ready",
         "knowledgeLevel": "K2",
         "domains": [
           "Public Chatbot Delivery"
@@ -140,7 +146,7 @@
           },
           "authentication": {
             "status": "affected",
-            "reason": "Company user authentication uses Auth0; users self-register and chatSaaS accounts are created automatically."
+            "reason": "Company user authentication uses Amazon Cognito User Pools; users self-register and chatSaaS accounts are created automatically."
           },
           "notifications": {
             "status": "not-applicable"
@@ -167,8 +173,8 @@
         "id": "WI-001",
         "type": "feature",
         "title": "Define public chatbot creation and publishing",
-        "status": "draft",
-        "lifecycle": "draft",
+        "status": "ready",
+        "lifecycle": "ready",
         "knowledgeLevel": "K2",
         "domains": [
           "Public Chatbot Delivery"
@@ -211,7 +217,7 @@
           },
           "authentication": {
             "status": "affected",
-            "reason": "Company user authentication uses Auth0; users self-register and chatSaaS accounts are created automatically."
+            "reason": "Company user authentication uses Amazon Cognito User Pools; users self-register and chatSaaS accounts are created automatically."
           },
           "notifications": {
             "status": "not-applicable"
@@ -251,10 +257,20 @@
     },
     {
       "layer": "Tech",
-      "status": "Weak",
+      "status": "Structured",
       "detected": [
+        "001-use-cognito-for-authentication.md",
+        "002-use-pnpm-as-package-manager.md",
+        "003-technology-stack-selection.md",
+        "004-aws-service-selection-for-ai-capabilities.md",
+        "005-cost-attribution-and-billing-mechanism.md",
+        "006-data-partitioning-strategy-for-tenant-isolation.md",
+        "007-visual-design-system.md",
+        "api-spec.md",
+        "architecture-notes.md",
         "codebase.md",
         "current-state.md",
+        "data-model.md",
         "decision-candidates.md",
         "knowledge.md",
         "quality-attributes.md"
@@ -284,9 +300,9 @@
       }
     },
     "tech": {
-      "status": "Weak",
+      "status": "Structured",
       "artifacts": {
-        "knowledge/tech/codebase.md": "weak",
+        "knowledge/tech/codebase.md": "useful",
         "knowledge/tech/current-state.md": "useful"
       }
     },
@@ -308,21 +324,23 @@
     "remaining": 0
   },
   "phase": {
-    "phase": "Knowledge Refinement",
+    "phase": "Active Delivery",
     "reasons": [
       "Roadmap available",
       "1 materialized work item(s)",
-      "draft: 1",
+      "ready: 1",
       "Ownership coverage 0%"
     ],
     "recommendedAgents": [
-      "architecture-agent"
+      "implementation-agent",
+      "kaddo owners suggest"
     ],
     "nextStep": "Run `kaddo add skills` to install reusable Kaddo skills.",
     "llmInstructions": [
-      "The baseline files exist but still look like bootstrap placeholders.",
-      "Use the architecture-agent to replace the placeholders with real, project-specific knowledge.",
-      "Do not write code."
+      "Use the implementation-agent.",
+      "Suggest a branch name only.",
+      "Do not run git commands.",
+      "Ownership is incomplete — propose `code:` globs (run `kaddo owners suggest`)."
     ]
   },
   "nextStepRecommendation": {
@@ -334,39 +352,64 @@
   },
   "deliveryState": {
     "phase": "Setup",
-    "draft_work_items": 1,
-    "refined_draft_work_items": 1,
-    "refined_draft_ids": [
+    "draft_work_items": 0,
+    "refined_draft_work_items": 0,
+    "refined_draft_ids": [],
+    "ready_work_items": 1,
+    "ready_work_item_ids": [
       "WI-001"
     ],
-    "ready_work_items": 0,
-    "ready_work_item_ids": [],
     "ready_multirepo_wi_ids": [],
     "in_progress_work_items": 0,
     "blocked_work_items": 0,
     "total_work_items": 1,
     "ownership_coverage": "0/1",
     "remaining_work_item_candidates": 0,
-    "decision_candidates": 2,
-    "accepted_adrs": 0,
+    "decision_candidates": 7,
+    "accepted_adrs": 7,
     "adapters_installed": 1
   },
   "techDecisions": {
-    "status": "candidates",
-    "candidates": 2,
-    "adrs": 0,
+    "status": "accepted-adrs",
+    "candidates": 7,
+    "adrs": 7,
     "draft_adrs": 0,
-    "accepted_adrs": 0,
+    "accepted_adrs": 7,
     "candidate_list": [
       {
-        "title": "DC-001: Tenant Isolation Model",
+        "title": "AWS Service Selection for AI Capabilities",
         "source": "knowledge/tech/discovery/decision-candidates.md",
-        "suggestedAdrFile": "knowledge/tech/decisions/ADR-001-dc-001-tenant-isolation-model.md"
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-008-aws-service-selection-for-ai-capabilities.md"
       },
       {
-        "title": "DC-002: Tenant Usage Metering and Subscription Limits",
+        "title": "Cost Attribution and Billing Mechanism",
         "source": "knowledge/tech/discovery/decision-candidates.md",
-        "suggestedAdrFile": "knowledge/tech/decisions/ADR-002-dc-002-tenant-usage-metering-and-subscription-limits.md"
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-009-cost-attribution-and-billing-mechanism.md"
+      },
+      {
+        "title": "Data Partitioning Strategy for Tenant Isolation",
+        "source": "knowledge/tech/discovery/decision-candidates.md",
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-010-data-partitioning-strategy-for-tenant-isolation.md"
+      },
+      {
+        "title": "Application Architecture Style",
+        "source": "knowledge/tech/discovery/decision-candidates.md",
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-011-application-architecture-style.md"
+      },
+      {
+        "title": "Usage Limits and Enforcement",
+        "source": "knowledge/tech/discovery/decision-candidates.md",
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-012-usage-limits-and-enforcement.md"
+      },
+      {
+        "title": "Credit System Implementation",
+        "source": "knowledge/tech/discovery/decision-candidates.md",
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-013-credit-system-implementation.md"
+      },
+      {
+        "title": "Observability and Monitoring Approach",
+        "source": "knowledge/tech/discovery/decision-candidates.md",
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-014-observability-and-monitoring-approach.md"
       }
     ],
     "candidates_source": "knowledge/tech/discovery/decision-candidates.md",
@@ -379,11 +422,11 @@
       "codebase.md": true
     },
     "decisions": {
-      "adrs": 0,
+      "adrs": 7,
       "dir": true
     },
     "discovery": {
-      "architecture-notes.md": false,
+      "architecture-notes.md": true,
       "decision-candidates.md": true,
       "legacyLocation": false
     }
@@ -434,13 +477,13 @@
   "workItemSummary": {
     "total": 1,
     "active": 1,
-    "draft": 1,
-    "ready": 0,
+    "draft": 0,
+    "ready": 1,
     "in_progress": 0,
     "blocked": 0,
     "completed": 0,
     "archived": 0,
-    "summary": "draft-only"
+    "summary": "ready"
   },
   "deliveryMix": {
     "feature": 1
@@ -449,13 +492,45 @@
   "graph": null,
   "graphHints": null,
   "skills": [],
-  "scanSignals": null,
+  "scanSignals": {
+    "auth": [],
+    "payments": [],
+    "webhooks": [],
+    "storage": [],
+    "background_jobs": [],
+    "email": [],
+    "database": [],
+    "migrations": [],
+    "api_routes": [],
+    "tests": [
+      {
+        "type": "tests",
+        "label": "No test directory detected",
+        "confidence": "high",
+        "evidence": [],
+        "recommended_review": "Confirm how this project is validated before production changes."
+      }
+    ],
+    "security": [],
+    "infrastructure": [
+      {
+        "type": "infrastructure",
+        "label": "infra/",
+        "confidence": "high",
+        "evidence": [
+          "infra/"
+        ]
+      }
+    ],
+    "external_integrations": [],
+    "environment": []
+  },
   "projectRoute": {
     "type": "new",
-    "currentStep": "refine-work-item",
-    "completed": 6,
+    "currentStep": "prepare-implementation",
+    "completed": 8,
     "total": 12,
-    "progressPercent": 50,
+    "progressPercent": 67,
     "steps": [
       {
         "id": "enable-kaddo",
@@ -492,11 +567,11 @@
       {
         "id": "describe-architecture",
         "label": "Define initial architecture",
-        "status": "pending",
+        "status": "done",
         "evidence": [
-          "knowledge/tech/current-state.md"
-        ],
-        "agent": "architecture-agent"
+          "knowledge/tech/current-state.md",
+          "knowledge/tech/codebase.md"
+        ]
       },
       {
         "id": "create-work-source",
@@ -517,10 +592,7 @@
       {
         "id": "refine-work-item",
         "label": "Refine Work Item",
-        "status": "current",
-        "reason": "There is 1 draft Work Item and no Work Item is ready.",
-        "agent": "work-item-agent",
-        "skill": "work-item-refinement"
+        "status": "done"
       },
       {
         "id": "suggest-ownership",
@@ -532,12 +604,13 @@
       {
         "id": "prepare-implementation",
         "label": "Prepare implementation",
-        "status": "next"
+        "status": "current",
+        "agent": "implementation-agent"
       },
       {
         "id": "run-guard",
         "label": "Run guard",
-        "status": "pending"
+        "status": "next"
       },
       {
         "id": "capture-learning",
@@ -548,29 +621,27 @@
   },
   "metadataHealth": {
     "findings": [],
-    "healthy": 6,
+    "healthy": 4,
     "drifted": 0
   },
   "mappedModules": [],
   "moduleStatuses": {},
   "affectedModuleContexts": {},
   "isModuleRepo": false,
-  "missing": [
-    "Scan baseline missing. Run `kaddo scan` for better context.",
-    "No technical inventory found. Run `kaddo scan` to generate it.",
-    "2 technical decision candidate(s) not yet materialized as ADRs (run `kaddo adr`)."
-  ],
+  "missing": [],
   "handoff": {
     "recommendedAgents": [
-      "architecture-agent"
+      "implementation-agent",
+      "kaddo owners suggest"
     ],
     "nextSteps": [
       "Run `kaddo add skills` to install reusable Kaddo skills."
     ],
     "instructions": [
-      "The baseline files exist but still look like bootstrap placeholders.",
-      "Use the architecture-agent to replace the placeholders with real, project-specific knowledge.",
-      "Do not write code."
+      "Use the implementation-agent.",
+      "Suggest a branch name only.",
+      "Do not run git commands.",
+      "Ownership is incomplete — propose `code:` globs (run `kaddo owners suggest`)."
     ],
     "operatingRules": [
       "**Never run `git commit`, `git push` or `git merge` without explicit human confirmation.**",

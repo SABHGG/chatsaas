@@ -1,0 +1,64 @@
+{
+  "version": "1",
+  "generatedAt": "2026-08-24T22:35:46.406Z",
+  "project": {
+    "state": "new",
+    "structure": "monorepo",
+    "teamSize": "indie"
+  },
+  "detected": {
+    "languages": [
+      "javascript"
+    ],
+    "frameworks": [],
+    "packageManagers": [
+      "pnpm"
+    ],
+    "sourceDirectories": [],
+    "migrationDirectories": [],
+    "contractFiles": [],
+    "infrastructureFiles": [
+      "infra/"
+    ],
+    "testDirectories": []
+  },
+  "signals": {
+    "auth": [],
+    "payments": [],
+    "webhooks": [],
+    "storage": [],
+    "background_jobs": [],
+    "email": [],
+    "database": [],
+    "migrations": [],
+    "api_routes": [],
+    "tests": [
+      {
+        "type": "tests",
+        "label": "No test directory detected",
+        "confidence": "high",
+        "evidence": [],
+        "recommended_review": "Confirm how this project is validated before production changes."
+      }
+    ],
+    "security": [],
+    "infrastructure": [
+      {
+        "type": "infrastructure",
+        "label": "infra/",
+        "confidence": "high",
+        "evidence": [
+          "infra/"
+        ]
+      }
+    ],
+    "external_integrations": [],
+    "environment": []
+  },
+  "suggestions": {
+    "possibleDomains": [],
+    "openQuestions": [
+      "No test directory detected — confirm how this project is tested."
+    ]
+  }
+}

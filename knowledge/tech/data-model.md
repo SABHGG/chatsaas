@@ -1,0 +1,102 @@
+# Data Model
+
+## Overview
+This document describes the core data entities for chatSaaS, focusing on the MVP scope defined in WI-001: public chatbot creation and publishing.
+
+## Entities
+
+### Company
+Represents a business that signs up for chatSaaS.
+- `id`: UUID (primary key)
+- `name`: string
+- `created_at`: timestamp
+- `updated_at`: timestamp
+- `settings`: JSON (optional, for preferences like branding)
+
+### User
+Represents a company user (admin) who authenticates via Amazon Cognito.
+- `id`: UUID (primary key) – maps to Cognito sub
+- `company_id`: foreign key to Company
+- `email`: string (from Cognito)
+- `role`: enum (`admin`, `member`) – default `admin`
+- `created_at`: timestamp
+
+### Chatbot
+A public-facing AI agent grounded in a company's documents.
+- `id`: UUID (primary key)
+- `company_id`: foreign key to Company
+- `name`: string (user‑defined, displayed in admin dashboard)
+- `description`: optional text
+- `status`: enum (`draft`, `published`, `archived`)
+- `settings`: JSON (e.g., temperature, max tokens, fallback behavior)
+- `document_count`: integer (denormalized for quick UI)
+- `created_at`: timestamp
+- `updated_at`: timestamp
+- `published_at`: timestamp (nullable)
+
+### Document
+A file uploaded by a company to train its chatbot.
+- `id`: UUID (primary key)
+- `chatbot_id`: foreign key to Chatbot
+- `file_name`: string
+- `file_size`: integer (bytes)
+- `content_type`: string (MIME type)
+- `status`: enum (`uploaded`, `processing`, `ready`, `failed`)
+- `metadata`: JSON (e.g., extracted page count, language)
+- `created_at`: timestamp
+- `updated_at`: timestamp
+
+### Conversation
+A session of interaction between a visitor and a published chatbot.
+- `id`: UUID (primary key)
+- `chatbot_id`: foreign key to Chatbot
+- `visitor_id`: string (anonymous identifier, e.g., hashed IP or cookie)
+- `started_at`: timestamp
+- `ended_at`: timestamp (nullable)
+- `message_count`: integer
+- `created_at`: timestamp
+
+### Message
+A single turn in a conversation.
+- `id`: UUID (primary key)
+- `conversation_id`: foreign key to Conversation
+- `role`: enum (`user`, `assistant`)
+- `content`: text
+- `created_at`: timestamp
+- `token_count`: integer (optional, for metering)
+
+### UsageMetric
+Aggregated counters for billing and plan enforcement.
+- `id`: UUID (primary key)
+- `company_id`: foreign key to Company
+- `period_start`: date (first day of month)
+- `period_end`: date (last day of month)
+- `conversations_count`: integer
+- `document_processing_volume`: integer (total bytes processed)
+- `chatbots_count`: integer (number of published chatbots)
+- `credits_used`: integer (number of conversations covered by prepaid credits)
+- `created_at`: timestamp
+- `updated_at`: timestamp
+
+## Relationships
+- Company 1 — ∞ User
+- Company 1 — ∞ Chatbot
+- Chatbot 1 — ∞ Document
+- Chatbot 1 — ∞ Conversation
+- Conversation 1 — ∞ Message
+- Company 1 — ∞ UsageMetric (one per month)
+
+## Access Patterns
+- **Admin Dashboard**: Load a company’s chatbots with document counts.
+- **Document Upload**: Append to Document, update Chatbot.document_count.
+- **Chatbot Publishing**: Update Chatbot.status to `published`, set published_at.
+- **Public Chat Endpoint**: Given a chatbot’s public URL (or ID), retrieve its settings and ready documents to build the RAG index.
+- **Conversation Start**: Insert Conversation with visitor_id, then stream messages.
+- **Metering**: Nightly job aggregates Conversations and Documents into UsageMetric per company per month.
+
+## Implementation Notes
+- Primary keys are UUIDs to avoid exposing sequential IDs and to support distributed generation if needed.
+- All timestamps stored in UTC.
+- JSON settings fields allow flexibility for future features without schema migrations.
+- Denormalized fields like `Chatbot.document_count` are updated via application logic or database triggers to keep UI fast.
+- Soft delete is not required for MVP; archiving a chatbot sets status to `archived` and hides it from active lists.
