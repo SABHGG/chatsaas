@@ -1,23 +1,27 @@
+# Dependencies
 node_modules/
-dist/
-.next/
-.turbo/
-*.log
-.DS_Store
 
-# Environment files
-.env
-.env.local
+# Production
+/.next/
+/out/
+
+# Dependencies build
+/turbo
+/.pnpm
+
+# Environment variables
 .env*.local
-!.env.example
-!.env.local.example
 
-# CDK
-cdk.out/
+# Logs
+logs/
+*.log
 
-# Build outputs
-*.js
-*.d.ts
-!jest.config.js
-!prettier.config.js
-!tailwind.config.js
+# Typescript
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+
+# Swagger
+swagger-docs.json

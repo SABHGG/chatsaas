@@ -54,6 +54,7 @@ Next step: Run `kaddo add skills` to install reusable Kaddo skills.
 Route: new · Progress: 8/12
 
 Current:
+
 - Prepare implementation — implementation-agent
 
 ## Knowledge Layers
@@ -63,13 +64,16 @@ Project knowledge is organized in four layers: **Business → Product → Tech �
 Knowledge maturity — Business: Consolidated · Product: Structured · Tech: Structured · Delivery: Traceable
 
 ### Business — Consolidated
+
 - ✓ business.md
 
 ### Product — Structured
+
 - ✓ capabilities.md
 - ✓ product.md
 
 ### Tech — Structured
+
 - ✓ 001-use-cognito-for-authentication.md
 - ✓ 002-use-pnpm-as-package-manager.md
 - ✓ 003-technology-stack-selection.md
@@ -87,6 +91,7 @@ Knowledge maturity — Business: Consolidated · Product: Structured · Tech: St
 - ✓ quality-attributes.md
 
 ### Delivery — Traceable
+
 - ✓ WI-001-define-public-chatbot-creation-and-publishing.md
 - ✓ WI-002-define-backend-endpoints.md
 - ✓ roadmap.md
@@ -120,6 +125,7 @@ Initiatives and Work Items below are candidates for human review, not implementa
 ## Roadmap Quality
 
 Initiatives:
+
 - Candidates evaluated: 1
 - Grounded: 1/1
 - With related domain: 1/1
@@ -127,6 +133,7 @@ Initiatives:
 - With source signals: 1/1
 
 Work Item Candidates:
+
 - Candidates: 1
 - With source initiative: 1/1
 - With related domain: 0/1

@@ -35,6 +35,8 @@
         "title": "Define public chatbot creation and publishing",
         "status": "ready",
         "lifecycle": "ready",
+        "status": "ready",
+        "lifecycle": "ready",
         "knowledgeLevel": "K2",
         "domains": [
           "Public Chatbot Delivery"
@@ -102,6 +104,8 @@
         "id": "WI-001",
         "type": "feature",
         "title": "Define public chatbot creation and publishing",
+        "status": "ready",
+        "lifecycle": "ready",
         "status": "ready",
         "lifecycle": "ready",
         "knowledgeLevel": "K2",
@@ -173,6 +177,8 @@
         "id": "WI-001",
         "type": "feature",
         "title": "Define public chatbot creation and publishing",
+        "status": "ready",
+        "lifecycle": "ready",
         "status": "ready",
         "lifecycle": "ready",
         "knowledgeLevel": "K2",
@@ -330,6 +336,7 @@
       "Roadmap available",
       "1 materialized work item(s)",
       "ready: 1",
+      "ready: 1",
       "Ownership coverage 0%"
     ],
     "recommendedAgents": [
@@ -353,6 +360,11 @@
   },
   "deliveryState": {
     "phase": "Setup",
+    "draft_work_items": 0,
+    "refined_draft_work_items": 0,
+    "refined_draft_ids": [],
+    "ready_work_items": 1,
+    "ready_work_item_ids": [
     "draft_work_items": 0,
     "refined_draft_work_items": 0,
     "refined_draft_ids": [],
@@ -480,10 +492,13 @@
     "active": 1,
     "draft": 0,
     "ready": 1,
+    "draft": 0,
+    "ready": 1,
     "in_progress": 0,
     "blocked": 0,
     "completed": 0,
     "archived": 0,
+    "summary": "ready"
     "summary": "ready"
   },
   "deliveryMix": {
@@ -594,6 +609,7 @@
         "id": "refine-work-item",
         "label": "Refine Work Item",
         "status": "done"
+        "status": "done"
       },
       {
         "id": "suggest-ownership",
@@ -607,10 +623,13 @@
         "label": "Prepare implementation",
         "status": "current",
         "agent": "implementation-agent"
+        "status": "current",
+        "agent": "implementation-agent"
       },
       {
         "id": "run-guard",
         "label": "Run guard",
+        "status": "next"
         "status": "next"
       },
       {
