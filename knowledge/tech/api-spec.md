@@ -1,23 +1,29 @@
 # API Specification
 
 ## Overview
+
 Defines the REST/JSON API contract for the chatSaaS platform, covering admin dashboard operations and public chatbot endpoints. All API paths are prefixed with `/api`.
 
 ## Authentication
+
 - Admin endpoints require a valid Amazon Cognito JWT (access token) in the `Authorization: Bearer <token>` header.
 - Public chatbot endpoints are open (no authentication) but rate‑limited by IP and chatbot ID.
 
 ## Common Responses
+
 - Success: JSON object with `data` field.
 - Error: JSON object with `error` (string) and optionally `details`.
 - HTTP status codes: 200 for success, 201 for created, 400 for validation, 401/403 for auth, 404 for not found, 429 for rate limit, 500 for server error.
 
 ## Admin Dashboard Endpoints
+
 ### Company & Auth (handled by Cognito, not custom API)
-- Userinfo: `GET /oauth2/userInfo` (Cognito endpoint) – returns `sub`, `email`, `custom:company_id` etc.
+
+- **Userinfo**: `GET /oauth2/userInfo` (Cognito endpoint) – returns `sub`, `email`, `custom:company_id` etc.
   - The frontend uses this to determine the current company.
 
 ### Chatbots
+
 - **List chatbots for company**
   - `GET /api/chatbots`
   - Query: none
@@ -50,6 +56,7 @@ Defines the REST/JSON API contract for the chatSaaS platform, covering admin das
   - Response: `{ "data": null }` (soft delete → status `archived`).
 
 ### Documents
+
 - **Upload document (multipart/form-data)**
   - `POST /api/chatbots/:chatbotId/documents`
   - Form: `file` (required), max 10 MB, allowed types: `.pdf`, `.docx`, `.txt`, `.md`.
@@ -74,40 +81,76 @@ Defines the REST/JSON API contract for the chatSaaS platform, covering admin das
   - `GET /api/documents/:documentId`
   - Response: document object.
 
+### Credits and Plans
+
+List plans
+- `GET /api/plans`
+- Query: none
+- Response:
+  ```json
+  {
+    "data": [
+      {
+        "id": "uuid",
+        "name": "string",
+        "monthly_conversation_limit": integer,
+        "monthly_credit_allocated": integer,
+        "price_monthly": integer (cents),
+        "status": "active|inactive",
+        "created_at": "ISO string"
+      }
+    ]
+  }
+  ```
+
+Credit ledger snapshot
+- `GET /api/credits/snapshot`
+- Query: none
+- Response:
+  ```json
+  {
+    "data": {
+      "balance": integer (credits),
+      "used_this_month": integer,
+      "limit": integer,
+      "auto_reload": boolean
+    }
+  }
+  ```
+
+Consume credit for completed conversation
+- `POST /api/credits/converse`
+- Body: `{ "chatbot_id": "uuid" }`
+- Response (202): `{ "data": { "conversation_id": "uuid" }, "request_id": "uuid" }`
+
 ### Publishing
+
 - **Publish chatbot**
   - `POST /api/chatbots/:chatbotId/publish`
-  - Body: none
-  - Response (200): updated chatbot with `status: "published"` and `published_at` set.
-- **Unpublish chatbot**
-  - `POST /api/chatbots/:chatbotId/unpublish`
-  - Body: none
-  - Response: chatbot with `status: "draft"` and `published_at: null`.
-
-### Usage & Billing (read‑only for MVP)
-- **Get current usage**
-  - `GET /api/usage/current`
-  - Response:
+  - Body: `{ "plan_id": "uuid" }`
+  - Response (202):
     ```json
     {
       "data": {
-        "period_start": "YYYY-MM-DD",
-        "period_end": "YYYY-MM-DD",
-        "conversations_count": integer,
-        "document_processing_volume": integer,
-        "chatbots_count": integer,
-        "credits_used": integer,
-        "plan_limit_conversations": integer|null,
-        "plan_limit_chatbots": integer|null,
-        "plan_limit_document_volume": integer|null
+        "status": "published",
+        "url": "string (shareable URL)",
+        "iframe_src": "string (embed HTML)",
+        "expires_at": "ISO string|null"
       }
     }
     ```
 
+- **List published chatbots**
+  - `GET /api/chatbots/published`
+  - Query: none
+  - Response: array of chatbot objects with `status: published`, `url`, `iframe_src`.
+
 ## Public Chatbot Endpoints
+
 These endpoints are accessed via the public URL or iframe embed (e.g., `https://chat.saas.company.com/:chatbotId` or via embed script).
 
 ### Load chatbot settings (for widget initialization)
+
 - `GET /api/public/chatbots/:chatbotId/config`
 - Response:
   ```json
@@ -117,65 +160,39 @@ These endpoints are accessed via the public URL or iframe embed (e.g., `https://
       "name": "string", // display name for widget header (optional)
       "placeholder": "string", // input placeholder text
       "welcomeMessage": "string", // first message from bot
-      "theme": { "primary": "#2563eb", "background": "#ffffff", "text": "#111827" } // example
+      "theme": { "primary": "string", "secondary": "string" },
+      "status": "draft|published",
+      "expires_at": "ISO string|null"
     }
   }
   ```
-- If chatbot not found or not published: 404.
 
-### Send message and receive streaming response
-- `POST /api/public/chatbots/:chatbotId/chat`
-- Body: `{ "message": "string", "conversationId": "string|null" }`
-  - `conversationId` optional; if omitted or invalid, a new conversation is started.
-- Response: `Content-Type: text/event-stream` (Server‑Sent Events).
-  - Events:
-    - `event: metadata` – data: `{ "conversationId": "uuid" }` (sent first)
-    - `event: token` – data: `{ "text": "string" }` (repeated for each token/piece)
-    - `event: done` – data: `{ "isComplete": true }` (final)
-  - On error: `event: error` – data: `{ "message": "string" }` and close stream.
+### Generate iframe embed code
 
-### Get conversation history (optional, for widget to display past messages)
-- `GET /api/public/conversations/:conversationId/messages`
+- `GET /api/public/chatbots/:chatbotId/iframe`
 - Response:
   ```json
   {
-    "data": [
-      { "role": "user|assistant", "content": "string", "createdAt": "ISO string" },
-      ...
-    ]
+    "data": {
+      "iframe_src": "string (HTML iframe snippet)",
+      "expires_at": "ISO string|null"
+    }
   }
   ```
 
-## Rate Limiting & Security
-- Public chat endpoints: limit to 30 requests per minute per IP per chatbot.
-- Admin endpoints: limit to 120 requests per minute per company.
-- All endpoints validate input size and schema.
-- Errors never leak stack traces.
+## Rate Limits
 
-## Future Extensions (not for MVP)
-- Webhooks for conversation events.
-- Admin analytics endpoints.
-- Document re‑processing endpoint.
-- API keys for server‑to‑server integrations.
+- Public chatbot endpoints: 100 requests per minute per IP.
+- Admin endpoints: 1000 requests per minute per authenticated user.
+- Credit consumption: 1 credit per completed conversation.
 
----
+## Error Format
 
-## Work Units (for implementation)
-Each endpoint or group can be a work unit:
-1. **Auth helper** – utility to verify Cognito JWT and extract company_id.
-2. **Chatbots CRUD** – routes `/api/chatbots` (GET, POST, PATCH, DELETE).
-3. **Document upload & management** – routes for `/api/chatbots/:chatbotId/documents`.
-4. **Publish/unpublish** – routes for `/api/chatbots/:chatbotId/publish` and `/unpublish`.
-5. **Usage endpoint** – `/api/usage/current`.
-6. **Public config endpoint** – `/api/public/chatbots/:chatbotId/config`.
-7. **Public chat endpoint** – SSE `/api/public/chatbots/:chatbotId/chat`.
-8. **Conversation history endpoint** – optional.
-9. **Middleware** – auth, rate limiting, error handling, validation.
-10. **Database models** – implement or update ORM/models per data-model.md.
-11. **Integration tests** – for each endpoint group.
-12. **Documentation** – keep this spec in sync with implementation.
-
----
-
-## Finish
-Unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, this spec, and every shipping raster carrying its provenance.
+- All error responses follow: `{ "error": "string", "details": {...}, "path": "string", "timestamp": "ISO string" }`
+- Specific error codes:
+  - `VALIDATION_ERROR` (400)
+  - `AUTHENTICATION_ERROR` (401)
+  - `AUTHORIZATION_ERROR` (403)
+  - `NOT_FOUND_ERROR` (404)
+  - `RATE_LIMIT_ERROR` (429)
+  - `SERVER_ERROR` (500)
