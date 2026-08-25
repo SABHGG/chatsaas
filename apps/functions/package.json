@@ -9,20 +9,24 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@chatsaas/core": "workspace:*",
-    "@chatsaas/types": "workspace:*",
     "@aws-sdk/client-bedrock-runtime": "^3.1116.0",
-    "@aws-sdk/client-s3": "^3.1116.0",
     "@aws-sdk/client-dynamodb": "^3.1116.0",
+    "@aws-sdk/client-s3": "^3.1116.0",
     "@aws-sdk/lib-dynamodb": "^3.1116.0",
     "@aws-sdk/s3-request-presigner": "^3.1116.0",
-    "langchain": "^1.5.10",
+    "@chatsaas/core": "workspace:*",
+    "@chatsaas/types": "workspace:*",
     "@langchain/aws": "^1.4.4",
+    "fastify": "^5.12.1",
+    "fastify-cors": "^6.1.0",
+    "fastify-zod": "^1.4.0",
+    "langchain": "^1.5.10",
+    "uuid": "^14.0.2",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/node": "^20.17.6",
     "@types/aws-lambda": "^8.10.145",
+    "@types/node": "^20.17.6",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }
