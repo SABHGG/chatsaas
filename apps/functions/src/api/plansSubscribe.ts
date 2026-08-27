@@ -1,5 +1,4 @@
 import Fastify from 'fastify'
-import { ZodTypeProvider } from 'fastify-zod'
 import { v4 as uuidv4 } from 'uuid'
 import { scan, put, update, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
@@ -12,7 +11,7 @@ const INTERVAL_DAYS: Record<string, number> = {
 }
 
 export async function plansSubscribeFactory(preHook?: UserPreHook) {
-  const fastify = Fastify().withTypeProvider<ZodTypeProvider>()
+  const fastify = Fastify()
 
   if (preHook) {
     fastify.addHook('onRequest', preHook)
@@ -51,6 +50,16 @@ export async function plansSubscribeFactory(preHook?: UserPreHook) {
               },
             },
             required: ['success', 'data'],
+          },
+          404: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+            required: ['success', 'error'],
+            additionalProperties: false,
           },
         },
       },
@@ -114,5 +123,3 @@ export async function plansSubscribeFactory(preHook?: UserPreHook) {
 
   return fastify
 }
-
-export type { plansSubscribeFactory }

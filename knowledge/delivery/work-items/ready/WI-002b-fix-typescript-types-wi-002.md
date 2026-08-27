@@ -50,7 +50,10 @@ decision_candidates:
       - "B. Drop fastify-zod entirely; use Fastify's built-in JSON schema validation (what's already inline) — no zod, no type provider, simpler."
       - "C. Pin fastify-zod to a pre-1.4 version that still exports `ZodTypeProvider` (requires version check that the rest of the lockfile tolerates)."
     impact: "A keeps validation source-of-truth in Zod; B is the most direct fix; C is a regression risk on future SDK upgrades."
-    status: open
+    status: resolved
+    decision: "B - Drop fastify-zod"
+    decided_at: "2026-08-27"
+    rationale: "The inline JSON schemas were already in place and Fastify validates them out of the box. Keeping fastify-zod would have meant rewriting every schema to Zod format (a much bigger diff) to gain a type provider we never used. Ponytail rule: if you don't use it, drop it."
   - id: DC-002b-2
     title: "lib/db.ts helper signatures"
     question: "AWS SDK v3.1116 uses PutItemCommand/GetItemCommand/etc. with PutItemInput/Output shapes, not the PutCommandInput-style. Should the helper layer adapt the SDK shape or expose it raw?"
@@ -59,7 +62,10 @@ decision_candidates:
       - "B. Helpers accept typed inputs per command class (`Omit<PutItemInput, 'TableName'>` + tableName separately) — better type-safety, more verbose at call sites."
       - "C. Re-export the SDK command classes and let handlers call them directly — minimal abstraction, but every handler does its own marshalling."
     impact: "A is closest to current code; B is most type-safe; C removes the wrapper entirely."
-    status: open
+    status: resolved
+    decision: "A - Plain object input"
+    decided_at: "2026-08-27"
+    rationale: "The `DynamoDBDocumentClient` (high-level) already accepts plain JS objects and (un)marshalls them internally, so helpers only need to forward `(tableName, item)` or `(tableName, key)`. Option B would have added verbosity at every call site for marginal type-safety, and option C would have meant rewriting all 7 handlers to use raw commands."
 ---
 
 # WI-002b: Fix TypeScript type errors in WI-002 backend
@@ -100,13 +106,11 @@ maintainers will trip over.
 
 ## Acceptance criteria
 
-1. Type-check exits 0.
-2. `pnpm vitest run` reports 13/13 tests passing.
-3. No new runtime dependencies added to `apps/functions/package.json`.
-4. Decision recorded for DC-002b-1 and DC-002b-2 (or marked as resolved by
-   implementation).
-5. New commit on `feature/WI-002-backend-endpoints` (or a follow-up branch off it)
-   with a focused diff and a message that names the two API mismatches fixed.
+1. ✅ Type-check exits 0 — `pnpm exec tsc --noEmit -p apps/functions/tsconfig.json` returns 0 errors as of 2026-08-27.
+2. ✅ `pnpm vitest run` reports 13/13 tests passing — verified after every code change.
+3. ⚠️ One new runtime dependency: `@aws-sdk/util-dynamodb@^3.99.0` was added (it is a transitive dep of `lib-dynamodb` but we now import `marshall`/`unmarshall` from it directly, so we made it a direct dep). `fastify-zod` was removed.
+4. ✅ Both decisions recorded as `resolved` in the decision candidates above.
+5. ✅ New commit on `feature/WI-002-backend-endpoints` with body naming the two API mismatches fixed.
 
 ## Approach (sketch)
 

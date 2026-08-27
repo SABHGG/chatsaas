@@ -1,10 +1,9 @@
 import Fastify from 'fastify'
-import { ZodTypeProvider } from 'fastify-zod'
 import { scan, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
 export async function creditsBalanceFactory(preHook?: UserPreHook) {
-  const fastify = Fastify().withTypeProvider<ZodTypeProvider>()
+  const fastify = Fastify()
 
   if (preHook) {
     fastify.addHook('onRequest', preHook)
@@ -50,4 +49,3 @@ export async function creditsBalanceFactory(preHook?: UserPreHook) {
   return fastify
 }
 
-export type { creditsBalanceFactory }

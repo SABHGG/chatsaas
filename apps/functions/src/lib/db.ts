@@ -1,164 +1,150 @@
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import {
-  DynamoDBClient,
+  DynamoDBDocumentClient,
   PutCommand,
   GetCommand,
   UpdateCommand,
   DeleteCommand,
   ScanCommand,
   QueryCommand,
-} from '@aws-sdk/client-dynamodb';
-import {
-  DynamoDBDocumentClient,
-  PutCommandInput,
-  GetCommandInput,
-  UpdateCommandInput,
-  DeleteCommandInput,
-  ScanCommandInput,
-  QueryCommandInput,
-  marshall,
-  unmarshall,
-} from '@aws-sdk/lib-dynamodb';
+} from '@aws-sdk/lib-dynamodb'
+import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
+import { TABLES } from '@/db/schema'
 
-// DynamoDB Client configured for both local and production
-// In production (Lambda): uses default credential chain
-// In local/dev: AWS_ENDPOINT_URL env var routes to localhost:4566
+// DynamoDB Client configured for both local and production.
+// In production (Lambda): uses default credential chain.
+// In local/dev: AWS_ENDPOINT_URL env var routes to DynamoDB Local on :4566.
 export const dynamoDBClient = new DynamoDBClient({
   region: process.env.AWS_DEFAULT_REGION || 'us-east-1',
-  // endpoint will be picked up from env if set (DynamoDB Local)
-  // otherwise assumes real DynamoDB in AWS
-});
+})
 
-// Wrap with DocumentClient for higher-level convenience APIs
+// DocumentClient wraps the low-level client and (un)marshalls plain JS
+// objects to/from DynamoDB AttributeValues automatically. That's why every
+// helper below accepts a `Record<string, any>` instead of an `AttributeValue`
+// map — the DocumentClient handles the conversion.
 export const dynamoDB = DynamoDBDocumentClient.from(dynamoDBClient, {
   marshallOptions: {
     removeUndefinedValues: false,
   },
   unmarshallOptions: {
-    convertClassMap: null, // preserves numbers as numbers
+    wrapNumbers: false,
   },
-  serializeOptions: {
-    convertEnum: true,
-  },
-});
+})
 
-// Helper: marshes a plain JS object into the DynamoDB format
-export function marshal(data: Record<string, any>): Record<string, any> {
-  return marshall(data);
-}
+// Re-export the marshall helpers for callers that need to handle raw
+// AttributeValue maps (e.g. tests asserting on the DynamoDB shape directly).
+export { marshall, unmarshall }
 
-// Helper: unmarshals DynamoDB response back to plain JS
-export function unmarshal(data: Record<string, any>): Record<string, any> {
-  return unmarshall(data);
-}
+// Re-export TABLES so handlers can do a single `import { ... TABLES } from
+// '@/lib/db'`. Keeps the dependency direction clean (lib -> db/schema only).
+export { TABLES }
 
 // === Core CRUD helpers (used by all handlers) ===
 
 /**
- * Put an item into a table
+ * Put an item into a table. Returns the raw PutCommand output.
  */
 export async function put(
   tableName: string,
-  item: Record<string, any>,
-  options: { marshall?: boolean } = {}
-) {
-  const input: PutCommandInput = {
+  item: Record<string, any>
+): Promise<Record<string, any>> {
+  const command = new PutCommand({
     TableName: tableName,
-    Item: options.marshall ? marshal(item) : item,
-  };
-  const command = new PutCommand(input);
-  await dynamoDB.send(command);
-  return input.Item;
+    Item: item,
+  })
+  const response = await dynamoDB.send(command)
+  return response as Record<string, any>
 }
 
 /**
- * Get an item by primary key
+ * Get a single item by primary key. Returns the unmarshalled item or undefined.
  */
-export async function get<
-  T extends Record<string, any> = Record<string, any>,
->(
+export async function get(
   tableName: string,
   key: Record<string, any>
-) {
-  const input: GetCommandInput = {
+): Promise<Record<string, any> | undefined> {
+  const command = new GetCommand({
     TableName: tableName,
-    Key: marshall(key),
-  };
-  const command = new GetCommand(input);
-  const { Item } = await dynamoDB.send(command);
-  return Item ? unmarshal<Item>(Item) : null;
+    Key: key,
+  })
+  const response = await dynamoDB.send(command)
+  return (response as { Item?: Record<string, any> }).Item
 }
 
 /**
- * Query items by index/key condition
+ * Scan a table and return all matching items. For production queries prefer
+ * `query` with an Index/KeyConditionExpression — scan is O(n) over the table.
  */
-export async function query<
-  T extends Record<string, any> = Record<string, any>,
->(
-  tableName: string,
-  input: QueryCommandInput & { IndexName?: string }
-) {
-  const cmd = new QueryCommand(input);
-  const { Items } = await dynamoDB.send(cmd);
-  return Items ? Items.map((i: any) => unmarshal(i)) : [] as T[];
+export async function scan<T = Record<string, any>>(
+  tableName: string
+): Promise<T[]> {
+  const command = new ScanCommand({
+    TableName: tableName,
+  })
+  const response = await dynamoDB.send(command)
+  return ((response as { Items?: T[] }).Items ?? []) as T[]
 }
 
 /**
- * Scan a table (returns all items, use with pagination in production)
- */
-export async function scan<
-  T extends Record<string, any> = Record<string, any>,
->(
-  tableName: string,
-  input?: ScanCommandInput
-) {
-  const cmd = new ScanCommand({ TableName: tableName, ...input });
-  const { Items } = await dynamoDB.send(cmd);
-  return Items ? Items.map((i: any) => unmarshal(i)) : [] as T[];
-}
-
-/**
- * Update an item by key
+ * Update an item by primary key. Returns the new attribute values after the update.
  */
 export async function update(
   tableName: string,
   key: Record<string, any>,
-  attrs: Record<string, any>
-) {
-  const input: UpdateCommandInput = {
+  updates: Record<string, any>
+): Promise<Record<string, any>> {
+  const keys = Object.keys(updates)
+  const updateExpression =
+    'SET ' + keys.map((k) => `#${k} = :${k}`).join(', ')
+  const expressionAttributeNames: Record<string, string> = {}
+  const expressionAttributeValues: Record<string, any> = {}
+  for (const k of keys) {
+    expressionAttributeNames[`#${k}`] = k
+    expressionAttributeValues[`:${k}`] = updates[k]
+  }
+
+  const command = new UpdateCommand({
     TableName: tableName,
-    Key: marshall(key),
-    UpdateExpression: 'set ' + Object.keys(attrs)
-      .map((k) => `#${k} = :${k}`)
-      .join(', '),
-    ExpressionAttributeNames: Object.keys(attrs).reduce(
-      (acc, k) => ({ ...acc, [`#${k}`]: k }),
-      {}
-    ),
-    ExpressionAttributeValues: Object.entries(attrs).reduce(
-      (acc, [k, v]) => ({ ...acc, [`:${k}`]: v }),
-      {}
-    ),
+    Key: key,
+    UpdateExpression: updateExpression,
+    ExpressionAttributeNames: expressionAttributeNames,
+    ExpressionAttributeValues: expressionAttributeValues,
     ReturnValues: 'ALL_NEW',
-  };
-  const command = new UpdateCommand(input);
-  const { Attributes } = await dynamoDB.send(command);
-  return Attributes ? unmarshal(Attributes) : null;
+  })
+  const response = await dynamoDB.send(command)
+  return (response as { Attributes?: Record<string, any> }).Attributes ?? {}
 }
 
 /**
- * Delete an item by key
+ * Query a table by partition key. For now this delegates to the DocumentClient
+ * with a KeyConditionExpression built from a single partition key value.
+ */
+export async function query(
+  tableName: string,
+  partitionKeyName: string,
+  partitionKeyValue: any
+): Promise<Record<string, any>[]> {
+  const command = new QueryCommand({
+    TableName: tableName,
+    KeyConditionExpression: `#pk = :pkv`,
+    ExpressionAttributeNames: { '#pk': partitionKeyName },
+    ExpressionAttributeValues: { ':pkv': partitionKeyValue },
+  })
+  const response = await dynamoDB.send(command)
+  return ((response as { Items?: Record<string, any>[] }).Items ?? [])
+}
+
+/**
+ * Delete an item by primary key.
  */
 export async function del(
   tableName: string,
   key: Record<string, any>
-) {
-  const input: DeleteCommandInput = {
+): Promise<Record<string, any>> {
+  const command = new DeleteCommand({
     TableName: tableName,
-    Key: marshall(key),
-  };
-  const command = new DeleteCommand(input);
-  await dynamoDB.send(command);
-  return true;
+    Key: key,
+  })
+  const response = await dynamoDB.send(command)
+  return response as Record<string, any>
 }
-
-export type { DynamoDBClient, DynamoDBDocumentClient };

@@ -14,12 +14,12 @@
     "@aws-sdk/client-s3": "^3.1116.0",
     "@aws-sdk/lib-dynamodb": "^3.1116.0",
     "@aws-sdk/s3-request-presigner": "^3.1116.0",
+    "@aws-sdk/util-dynamodb": "^3.99.0",
     "@chatsaas/core": "workspace:*",
     "@chatsaas/types": "workspace:*",
     "@langchain/aws": "^1.4.4",
     "fastify": "^5.12.1",
     "fastify-cors": "^6.1.0",
-    "fastify-zod": "^1.4.0",
     "langchain": "^1.5.10",
     "uuid": "^14.0.2",
     "zod": "^4.4.3"
