@@ -3,9 +3,11 @@ type: chore
 id: WI-002b
 title: "Fix TypeScript type errors in WI-002 backend (lib/db.ts + fastify-zod 1.4.0 API migration)"
 knowledge_level: K2
-status: draft
-phase: next
+status: completed
+phase: done
 initiative: "RM-001"
+completed_at: "2026-08-27"
+branch: "feature/WI-002-backend-endpoints"
 domains:
   - "Backend APIs"
   - "Build and Type Safety"

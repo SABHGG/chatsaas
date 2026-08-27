@@ -3,9 +3,11 @@ type: feature
 id: WI-002
 title: "Define backend endpoints for public chatbot"
 knowledge_level: K2
-status: draft
-phase: next
+status: completed
+phase: done
 initiative: "RM-001"
+completed_at: "2026-08-27"
+branch: "feature/WI-002-backend-endpoints"
 domains:
   - "Backend APIs"
   - "Authentication"
