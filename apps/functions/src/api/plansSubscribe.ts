@@ -1,8 +1,12 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyPluginAsync } from 'fastify'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { v4 as uuidv4 } from 'uuid'
 import { get, put, updateExpr, query, del, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
+
+interface PluginOpts {
+  preHook: UserPreHook
+}
 
 // Maps a plan interval label to a number of days. Plans with unknown
 // intervals default to 30 days (the spec currently only defines monthly plans).
@@ -11,14 +15,16 @@ const INTERVAL_DAYS: Record<string, number> = {
   yearly: 365,
 }
 
-export async function plansSubscribeFactory(preHook?: UserPreHook) {
-  const fastify = Fastify()
+/**
+ * Fastify plugin for the admin `POST /api/plans/subscribe` route.
+ */
+const plansSubscribePlugin: FastifyPluginAsync<PluginOpts> = async (
+  fastify,
+  opts
+) => {
+  fastify.addHook('onRequest', opts.preHook)
 
-  if (preHook) {
-    fastify.addHook('onRequest', preHook)
-  }
-
-  // POST /api/plans/subscribe - Subscribe user to a plan
+  // POST / - Subscribe user to a plan
   fastify.post(
     '/',
     {
@@ -52,6 +58,14 @@ export async function plansSubscribeFactory(preHook?: UserPreHook) {
             },
             required: ['success', 'data'],
           },
+          401: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
           404: {
             type: 'object',
             properties: {
@@ -67,7 +81,16 @@ export async function plansSubscribeFactory(preHook?: UserPreHook) {
     },
     async (request, reply) => {
       const { planId } = request.body as { planId: string }
-      const userId = (request as any).user?.sub || 'anonymous'
+      const userId = (request as { user?: { sub?: string } }).user?.sub
+
+      if (!userId) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Unauthenticated',
+          code: 'UNAUTHENTICATED',
+        })
+      }
+
       const now = new Date().toISOString()
 
       const plan = await get(TABLES.PLANS, { id: planId })
@@ -149,6 +172,12 @@ export async function plansSubscribeFactory(preHook?: UserPreHook) {
       }
     }
   )
+}
 
+export async function plansSubscribeFactory(preHook: UserPreHook) {
+  const fastify = Fastify()
+  await fastify.register(plansSubscribePlugin, { preHook })
   return fastify
 }
+
+export { plansSubscribePlugin }

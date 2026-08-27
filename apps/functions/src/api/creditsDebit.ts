@@ -1,16 +1,22 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyPluginAsync } from 'fastify'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
-import { get, updateExpr, TABLES } from '@/lib/db'
+import { updateExpr, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
-export async function creditsDebitFactory(preHook?: UserPreHook) {
-  const fastify = Fastify()
+interface PluginOpts {
+  preHook: UserPreHook
+}
 
-  if (preHook) {
-    fastify.addHook('onRequest', preHook)
-  }
+/**
+ * Fastify plugin for the admin `POST /api/credits/debit` route.
+ */
+const creditsDebitPlugin: FastifyPluginAsync<PluginOpts> = async (
+  fastify,
+  opts
+) => {
+  fastify.addHook('onRequest', opts.preHook)
 
-  // POST /api/credits/debit - Debit credits for an action
+  // POST /debit - Debit credits for an action
   fastify.post(
     '/debit',
     {
@@ -42,6 +48,14 @@ export async function creditsDebitFactory(preHook?: UserPreHook) {
             },
             required: ['success', 'data'],
           },
+          401: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
           402: {
             type: 'object',
             properties: {
@@ -55,7 +69,15 @@ export async function creditsDebitFactory(preHook?: UserPreHook) {
     },
     async (request, reply) => {
       const { amount } = request.body as { amount: number }
-      const userId = (request as any).user?.sub || 'anonymous'
+      const userId = (request as { user?: { sub?: string } }).user?.sub
+
+      if (!userId) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Unauthenticated',
+          code: 'UNAUTHENTICATED',
+        })
+      }
 
       try {
         const attrs = await updateExpr(
@@ -82,6 +104,12 @@ export async function creditsDebitFactory(preHook?: UserPreHook) {
       }
     }
   )
+}
 
+export async function creditsDebitFactory(preHook: UserPreHook) {
+  const fastify = Fastify()
+  await fastify.register(creditsDebitPlugin, { preHook })
   return fastify
 }
+
+export { creditsDebitPlugin }

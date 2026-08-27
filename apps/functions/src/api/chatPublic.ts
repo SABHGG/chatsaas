@@ -1,16 +1,28 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyPluginAsync } from 'fastify'
 import { v4 as uuidv4 } from 'uuid'
 import { scan, put, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
-export async function chatPublicFactory(preHook?: UserPreHook) {
-  const fastify = Fastify()
-
-  if (preHook) {
-    fastify.addHook('onRequest', preHook)
+/**
+ * Fastify plugin for the public, anonymous chat surface
+ * (`GET /api/chat/public`, `POST /api/chat/public`). No auth hook is
+ * registered here — the server intentionally mounts this plugin without a
+ * `preHook` and a per-route `userId` of `'anonymous'` is the
+ * documented default when no `request.user` is present.
+ *
+ * The plugin still accepts a `preHook` option for test scenarios where the
+ * test wants to inject a fake user; in that case the handler uses
+ * `request.user.sub` if present.
+ */
+const chatPublicPlugin: FastifyPluginAsync<{ preHook?: UserPreHook }> = async (
+  fastify,
+  opts
+) => {
+  if (opts.preHook) {
+    fastify.addHook('onRequest', opts.preHook)
   }
 
-  // GET /api/chat/public - List recent public messages
+  // GET / - List recent public messages
   fastify.get(
     '/',
     {
@@ -50,17 +62,26 @@ export async function chatPublicFactory(preHook?: UserPreHook) {
         },
       },
     },
-    async (request, reply) => {
+    async (request) => {
       const limit = (request.query as { limit?: number }).limit ?? 50
-      const items = await scan<any>(TABLES.CHAT_MESSAGES)
+      const items = await scan<{
+        id: string
+        content: string
+        username?: string
+        createdAt: string
+        type: string
+      }>(TABLES.CHAT_MESSAGES)
       const messages = items
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        )
         .slice(0, limit)
       return { success: true, data: messages }
     }
   )
 
-  // POST /api/chat/public - Publish a new public message
+  // POST / - Publish a new public message
   fastify.post(
     '/',
     {
@@ -112,12 +133,15 @@ export async function chatPublicFactory(preHook?: UserPreHook) {
         username?: string
       }
 
-      const message: Record<string, any> = {
+      const userId =
+        (request as { user?: { sub?: string } }).user?.sub || 'anonymous'
+
+      const message: Record<string, unknown> = {
         id: uuidv4(),
         content,
         type: 'text',
         createdAt: new Date().toISOString(),
-        userId: (request as any).user?.sub || 'anonymous',
+        userId,
       }
       // Only include username when defined; the DocumentClient is configured
       // with removeUndefinedValues:true, but explicit omission keeps the stored
@@ -140,6 +164,12 @@ export async function chatPublicFactory(preHook?: UserPreHook) {
       })
     }
   )
+}
 
+export async function chatPublicFactory(preHook?: UserPreHook) {
+  const fastify = Fastify()
+  await fastify.register(chatPublicPlugin, { preHook })
   return fastify
 }
+
+export { chatPublicPlugin }

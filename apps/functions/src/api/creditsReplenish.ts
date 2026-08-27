@@ -1,16 +1,22 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyPluginAsync } from 'fastify'
 import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { get, put, updateExpr, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
-export async function creditsReplenishFactory(preHook?: UserPreHook) {
-  const fastify = Fastify()
+interface PluginOpts {
+  preHook: UserPreHook
+}
 
-  if (preHook) {
-    fastify.addHook('onRequest', preHook)
-  }
+/**
+ * Fastify plugin for the admin `POST /api/credits/replenish` route.
+ */
+const creditsReplenishPlugin: FastifyPluginAsync<PluginOpts> = async (
+  fastify,
+  opts
+) => {
+  fastify.addHook('onRequest', opts.preHook)
 
-  // POST /api/credits/replenish - Add credits to user balance
+  // POST /replenish - Add credits to user balance
   fastify.post(
     '/replenish',
     {
@@ -41,6 +47,14 @@ export async function creditsReplenishFactory(preHook?: UserPreHook) {
             },
             required: ['success', 'data'],
           },
+          401: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
           404: {
             type: 'object',
             properties: {
@@ -54,7 +68,16 @@ export async function creditsReplenishFactory(preHook?: UserPreHook) {
     },
     async (request, reply) => {
       const { amount } = request.body as { amount: number }
-      const userId = (request as any).user?.sub || 'anonymous'
+      const userId = (request as { user?: { sub?: string } }).user?.sub
+
+      if (!userId) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Unauthenticated',
+          code: 'UNAUTHENTICATED',
+        })
+      }
+
       const now = new Date().toISOString()
 
       // Check if a credit record exists.
@@ -125,6 +148,12 @@ export async function creditsReplenishFactory(preHook?: UserPreHook) {
       }
     }
   )
+}
 
+export async function creditsReplenishFactory(preHook: UserPreHook) {
+  const fastify = Fastify()
+  await fastify.register(creditsReplenishPlugin, { preHook })
   return fastify
 }
+
+export { creditsReplenishPlugin }

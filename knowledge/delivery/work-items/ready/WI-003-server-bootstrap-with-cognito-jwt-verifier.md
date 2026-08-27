@@ -3,8 +3,10 @@ type: feature
 id: WI-003
 title: "Server bootstrap with Cognito JWT verifier and route registration"
 knowledge_level: K2
-status: draft
-phase: next
+status: completed
+phase: done
+branch: feature/WI-003-server-bootstrap
+completed_at: "2026-08-27"
 initiative: "RM-001"
 created_at: "2026-08-27"
 source: judgment-day
@@ -81,7 +83,10 @@ decision_candidates:
       - "B. `jsonwebtoken` + `jwks-rsa` — older but ubiquitous. Requires manual JWKS caching."
       - "C. `@aws-sdk/client-cognito-identity-provider` `getUser`/`getUserAttributeVerificationCode` — heavy SDK, not designed for stateless verification; rejects on Lambda without SDK caching."
     impact: "A is the right call for a serverless backend: small, fast cold start, no SDK lock-in. C is overkill."
-    status: open
+    status: resolved
+    decision: "A - jose"
+    decided_at: "2026-08-27"
+    rationale: "jose is the modern, minimal-dep choice for serverless. Built-in JWKS rotation via createRemoteJWKSet, no AWS SDK coupling, and a single-tree ESM build that keeps Lambda cold start in check."
   - id: DC-003-2
     title: "Public endpoint authentication"
     question: "How are public endpoints (chatPublic GET/POST) distinguished from admin endpoints?"
@@ -90,7 +95,10 @@ decision_candidates:
       - "B. Make the preHook verifier a no-op for routes with a `meta: { public: true }` flag set on the Fastify route schema."
       - "C. Two separate Fastify instances / sub-apps: one public, one behind auth."
     impact: "A is the most direct. B is more declarative. C is overkill for a single binary."
-    status: open
+    status: resolved
+    decision: "A - allowlist"
+    decided_at: "2026-08-27"
+    rationale: "The public surface is small (only /api/chat/public*) and stable in the spec. A static allowlist in the server bootstrap is the most direct, easiest to test, and avoids leaking route metadata into the schema."
   - id: DC-003-3
     title: "Mandatory vs optional preHook"
     question: "The handler factories currently treat the preHook as optional. After this WI, should it be required?"
@@ -99,7 +107,10 @@ decision_candidates:
       - "B. Keep it optional but make the server bootstrap refuse to start if a public route is registered without a hook (defense in depth)."
       - "C. Keep it optional and document that omitting it ships a shared-anonymous tenant in production."
     impact: "A is the safest. B leaves a footgun. C is what we have today and is exactly what the JD flagged."
-    status: open
+    status: resolved
+    decision: "A - mandatory preHook"
+    decided_at: "2026-08-27"
+    rationale: "The factory signature should be a contract: if a caller wires a factory they pass a hook. Tests that need to exercise the hookless path are out of scope (the spec requires auth on admin routes)."
 refined_by: work-item-agent
 ---
 

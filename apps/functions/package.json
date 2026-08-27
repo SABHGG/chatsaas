@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc",
     "test": "vitest",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.1116.0",
@@ -17,9 +19,10 @@
     "@aws-sdk/util-dynamodb": "^3.99.0",
     "@chatsaas/core": "workspace:*",
     "@chatsaas/types": "workspace:*",
+    "@fastify/cors": "^11.3.0",
     "@langchain/aws": "^1.4.4",
     "fastify": "^5.12.1",
-    "fastify-cors": "^6.1.0",
+    "jose": "^5.10.0",
     "langchain": "^1.5.10",
     "uuid": "^14.0.2",
     "zod": "^4.4.3"
@@ -27,6 +30,7 @@
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",
     "@types/node": "^20.17.6",
+    "tsx": "^4.23.12",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"
   }

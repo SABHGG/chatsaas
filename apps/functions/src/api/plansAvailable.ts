@@ -1,15 +1,21 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyPluginAsync } from 'fastify'
 import { scan, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
-export async function plansAvailableFactory(preHook?: UserPreHook) {
-  const fastify = Fastify()
+interface PluginOpts {
+  preHook: UserPreHook
+}
 
-  if (preHook) {
-    fastify.addHook('onRequest', preHook)
-  }
+/**
+ * Fastify plugin for the admin `GET /api/plans/available` route.
+ */
+const plansAvailablePlugin: FastifyPluginAsync<PluginOpts> = async (
+  fastify,
+  opts
+) => {
+  fastify.addHook('onRequest', opts.preHook)
 
-  // GET /api/plans/available - List available subscription plans
+  // GET / - List available subscription plans
   fastify.get(
     '/',
     {
@@ -42,12 +48,18 @@ export async function plansAvailableFactory(preHook?: UserPreHook) {
         },
       },
     },
-    async (request, reply) => {
-      const items = await scan<any>(TABLES.PLANS)
+    async () => {
+      const items = await scan<{ active?: boolean }>(TABLES.PLANS)
       const activePlans = items.filter((item) => item.active === true)
       return { success: true, data: activePlans }
     }
   )
+}
 
+export async function plansAvailableFactory(preHook: UserPreHook) {
+  const fastify = Fastify()
+  await fastify.register(plansAvailablePlugin, { preHook })
   return fastify
 }
+
+export { plansAvailablePlugin }

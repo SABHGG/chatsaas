@@ -1,15 +1,21 @@
-import Fastify from 'fastify'
+import Fastify, { type FastifyPluginAsync } from 'fastify'
 import { get, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
-export async function contentGetFactory(preHook?: UserPreHook) {
-  const fastify = Fastify()
+interface PluginOpts {
+  preHook: UserPreHook
+}
 
-  if (preHook) {
-    fastify.addHook('onRequest', preHook)
-  }
+/**
+ * Fastify plugin for the admin `GET /api/content/:id` route.
+ */
+const contentGetPlugin: FastifyPluginAsync<PluginOpts> = async (
+  fastify,
+  opts
+) => {
+  fastify.addHook('onRequest', opts.preHook)
 
-  // GET /api/content/:id - Get content by ID
+  // GET /:id - Get content by ID
   fastify.get(
     '/:id',
     {
@@ -44,6 +50,14 @@ export async function contentGetFactory(preHook?: UserPreHook) {
             },
             required: ['success', 'data'],
           },
+          401: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
           404: {
             type: 'object',
             properties: {
@@ -56,6 +70,15 @@ export async function contentGetFactory(preHook?: UserPreHook) {
     },
     async (request, reply) => {
       const { id } = request.params as { id: string }
+      const userId = (request as { user?: { sub?: string } }).user?.sub
+
+      if (!userId) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Unauthenticated',
+          code: 'UNAUTHENTICATED',
+        })
+      }
 
       const content = await get(TABLES.CONTENT, { id })
 
@@ -69,6 +92,12 @@ export async function contentGetFactory(preHook?: UserPreHook) {
       return { success: true, data: content }
     }
   )
+}
 
+export async function contentGetFactory(preHook: UserPreHook) {
+  const fastify = Fastify()
+  await fastify.register(contentGetPlugin, { preHook })
   return fastify
 }
+
+export { contentGetPlugin }
