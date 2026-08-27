@@ -1,0 +1,56 @@
+# WI-002 Backend Endpoints Tasks
+
+## Change
+- **Name**: WI-002-backend-endpoints
+- **Based on**: WI-001-define-public-chatbot scaffold + OpenSpec spec
+- **Artifact store**: OpenSpec
+
+## Tasks (implementation order)
+
+### 1. Setup API Route Handlers
+- [ ] Create endpoint structure in `apps/functions/src/api/`
+- [ ] Define handler functions for each endpoint
+- [ ] Implement Zod validation schemas (request/response)
+- [ ] Add Cognito auth middleware integration
+- **Dependencies**: OpenAPI spec, types from `@chatsaas/types`
+
+### 2. DynamoDB Integration
+- [ ] Create DynamoDB tables (or use existing)
+- [ ] Implement message storage for chat endpoints
+- [ ] Implement credits balance/debit logic
+- [ ] Implement subscription tracking
+- [ ] Add AWS SDK v3 clients configuration
+- **Dependencies**: `@aws-sdk/client-dynamodb`, `@aws-sdk/lib-dynamodb`
+
+### 3. OpenAPI Specification Generation
+- [ ] Configure OpenAPI metadata for all routes
+- [ ] Generate type-safe client definitions
+- [ ] Document request/response schemas
+- **Dependencies**: `zod` schemas, route handlers
+
+### 4. Vitest Test Coverage
+- [ ] Write unit tests for validation schemas
+- [ ] Write integration tests for endpoint logic
+- [ ] Mock DynamoDB LocalStack for tests
+- [ ] Test error scenarios (400, 401, 402, 404, 409, 422)
+- **Dependencies**: vitest, @vitest/coverage-v8, @aws-sdk/client-stub
+
+### 5. TypeScript Type Definitions
+- [ ] Define comprehensive TypeScript types for all endpoints
+- [ ] Ensure strict type compatibility across workspace
+- [ ] Generate types from OpenAPI spec
+- **Dependencies**: `@chatsaas/types`, `typescript`
+
+### 6. Documentation & OpenAPI Export
+- [ ] Export OpenAPI spec file
+- [ ] Update API documentation
+- [ ] Add examples and usage guides
+- **Dependencies**: OpenAPI generator, markdown files
+
+## Definition of Done
+- All 6 tasks completed with passing tests
+- OpenAPI spec generated and validated
+- TypeScript types pass `pnpm type-check`
+- Code follows project conventions (strict TS, zod, AWS SDK v3)
+- Tests cover happy paths + error scenarios
+- Documentation updated

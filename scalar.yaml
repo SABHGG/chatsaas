@@ -1,0 +1,76 @@
+# Scalar API Documentation Configuration
+
+# WI-002 Backend Endpoints API
+
+OpenAPI spec: `openspec/WI-002-backend-endpoints-openapi.yaml`
+
+## Getting Started
+
+This API provides backend endpoints for the chatsaas platform, enabling:
+
+- **Public Chat**: List and publish messages to the public chat
+- **Credits Management**: Check and debit user credit balances
+- **Plan Subscription**: Subscribe users to available plans
+- **Content Publish**: Manage content publishing workflows
+
+## Quick Start
+
+```bash
+# Install dependencies
+pnpm install
+
+# Run development server
+pnpm dev
+
+# Generate OpenAPI spec
+pnpm generate:openapi
+
+# Validate OpenAPI spec
+pnpm validate:openapi
+```
+
+## Authentication
+
+All endpoints require Cognito JWT authentication. The middleware `verifyCognitoJWT` validates the bearer token from the `Authorization: Bearer <jwt>` header.
+
+## Endpoints Overview
+
+| Category | Endpoints |
+|----------|-----------|
+| Chat | `GET /api/chat/public`, `POST /api/chat/public` |
+| Credits | `GET /api/credits/balance`, `POST /api/credits/debit` |
+| Plans | `GET /api/plans/available`, `POST /api/plans/subscribe` |
+
+## Scalar Configuration
+
+This API documentation is configured for Scalar rendering. To customize:
+
+1. Edit `scalar.yaml` for theme/color settings
+2. Add custom sidebar items in `sidebar.ts`
+3. Configure authentication display in the Scalar UI
+
+### Scalar Theme Example
+
+```yaml
+theme:
+  primaryColor: "#1a1a2e"
+  sidebarColor: "#16213e"
+  footerColor: "#0f0e17"
+```
+
+## Development
+
+```bash
+# Run tests
+pnpm test
+
+# Type check
+pnpm type-check
+
+# Lint
+pnpm lint
+```
+
+## License
+
+MIT

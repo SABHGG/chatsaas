@@ -10,6 +10,7 @@ node_modules/
 /.pnpm
 
 # Environment variables
+.env
 .env*.local
 
 # Logs
@@ -25,3 +26,14 @@ logs/
 
 # Swagger
 swagger-docs.json
+
+# Next.js auto-generated
+/next-env.d.ts
+
+# Vitest/coverage outputs
+coverage/
+.nyc_output/
+
+# Test scratch files
+test-output.txt
+tsc-output.txt

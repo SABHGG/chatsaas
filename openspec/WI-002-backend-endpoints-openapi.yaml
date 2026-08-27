@@ -1,0 +1,312 @@
+openapi: 3.1.0
+info:
+  title: WI-002 Backend Endpoints API
+  description: REST API for public chat, credits management, plan subscription, and content publish functionality
+  version: "0.1.0"
+  contact:
+    name: chatsaas Team
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+paths:
+  /api/chat/public:
+    get:
+      summary: List recent public messages
+      operationId: listPublicMessages
+      tags:
+        - Chat
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        content:
+                          type: string
+                        username:
+                          type: string
+                          nullable: true
+                        createdAt:
+                          type: string
+                          format: date-time
+                        type:
+                          type: string
+                      required:
+                        - id
+                        - content
+                        - createdAt
+                        - type
+                      additionalProperties: false
+                required:
+                  - success
+                  - data
+        "400":
+          description: Bad request - invalid message format
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  error:
+                    type: string
+    post:
+      summary: Publish a new public message
+      operationId: publishPublicMessage
+      tags:
+        - Chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                username:
+                  type: string
+                  minLength: 1
+                  maxLength: 50
+                  nullable: true
+              required:
+                - content
+              additionalProperties: false
+      responses:
+        "201":
+          description: Message published successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      content:
+                        type: string
+                      username:
+                        type: string
+                        nullable: true
+                      createdAt:
+                        type: string
+                        format: date-time
+                      type:
+                        type: string
+                    required:
+                      - id
+                      - content
+                      - createdAt
+                      - type
+                    additionalProperties: false
+        "400":
+          description: Invalid message format
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  error:
+                    type: string
+  /api/credits/balance:
+    get:
+      summary: Get user credit balance
+      operationId: getCreditsBalance
+      tags:
+        - Credits
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      balance:
+                        type: integer
+                        minimum: 0
+                    required:
+                      - balance
+                required:
+                  - success
+                  - data
+  /api/credits/debit:
+    post:
+      summary: Debit credits for an action
+      operationId: debitCredits
+      tags:
+        - Credits
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount:
+                  type: number
+                  minimum: 1
+                reason:
+                  type: string
+                  nullable: true
+              required:
+                - amount
+              additionalProperties: false
+      responses:
+        "200":
+          description: Credits debited successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      newBalance:
+                        type: integer
+                        minimum: 0
+                    required:
+                      - newBalance
+                required:
+                  - success
+                  - data
+        "402":
+          description: Insufficient credits
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  error:
+                    type: string
+                  code:
+                    type: string
+  /api/plans/available:
+    get:
+      summary: List available subscription plans
+      operationId: listAvailablePlans
+      tags:
+        - Plans
+      responses:
+        "200":
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        name:
+                          type: string
+                        description:
+                          type: string
+                          nullable: true
+                        price:
+                          type: number
+                        interval:
+                          type: string
+                      required:
+                        - id
+                        - name
+                        - price
+                        - interval
+                      additionalProperties: false
+                required:
+                  - success
+                  - data
+  /api/plans/subscribe:
+    post:
+      summary: Subscribe user to a plan
+      operationId: subscribePlan
+      tags:
+        - Plans
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                planId:
+                  type: string
+                  format: uuid
+                paymentMethodId:
+                  type: string
+                  nullable: true
+              required:
+                - planId
+              additionalProperties: false
+      responses:
+        "200":
+          description: Subscription successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                      planId:
+                        type: string
+                      currentPeriodEnd:
+                        type: string
+                        format: date-time
+                    required:
+                      - status
+                      - planId
+                      - currentPeriodEnd
+                required:
+                  - success
+                  - data
+schemes:
+  - http
+  - https
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

@@ -1,0 +1,87 @@
+# WI-002 Backend Endpoints Specification
+
+## Change
+- **Name**: WI-002-backend-endpoints
+- **Intent**: Define REST API endpoints for public chat, credits management, plan subscription, and content publish functionality
+- **Scope**: apps/functions (AWS Lambda) with OpenAPI spec generation
+
+## Requirements
+
+### 1. Public Chat Endpoints
+- `GET /api/chat/public` - List recent public messages
+- `POST /api/chat/public` - Publish a new public message
+- `GET /api/chat/public/:id` - Get a specific public message by ID
+
+### 2. Credits Management Endpoints
+- `GET /api/credits/balance` - Get user's credit balance
+- `POST /api/credits/debit` - Debit credits for an action
+- `POST /api/credits/replenish` - Replenish credits (payment/webhook)
+
+### 3. Plan Subscription Endpoints
+- `GET /api/plans/available` - List available subscription plans
+- `POST /api/plans/subscribe` - Subscribe user to a plan
+- `GET /api/plans/user/:userId` - Get user's current plan subscription
+
+### 4. Content Publish Endpoints
+- `POST /api/content/publish` - Publish content to chat
+- `GET /api/content/:id` - Get published content details
+
+## Scenarios
+
+### Public Chat Flow
+1. User posts a message via `POST /api/chat/public`
+2. Message validated with Zod schema
+3. Message stored in DynamoDB via AWS SDK v3
+4. Other subscribers receive via WebSocket / polling
+
+### Credits Flow
+1. User checks balance via `GET /api/credits/balance`
+2. Action consumes credits via `POST /api/credits/debit`
+3. Balance updated atomically
+4. Insufficient funds returns 402 Payment Required
+
+### Subscription Flow
+1. User lists available plans via `GET /api/plans/available`
+2. User subscribes via `POST /api/plans/subscribe`
+3. Payment processed (Stripe/Conekta integration)
+4. Subscription stored in DynamoDB
+
+## Technical Specifications
+
+- **Runtime**: Node.js 20.x (AWS Lambda)
+- **Framework**: AWS SDK v3 (DynamoDB, S3, Cognito)
+- **Validation**: Zod schema validation for all inputs/outputs
+- **Database**: DynamoDB (serverless rates table, chat messages table)
+- **Auth**: Cognito User Pool JWT validation (middleware)
+- **Testing**: vitest with integration tests against LocalStack
+- **OpenAPI**: Auto-generation from route handlers
+- **TypeScript**: Strict mode, comprehensive types
+
+## Dependencies
+
+### Internal
+- `@chatsaas/core` - Shared utilities and constants
+- `@chatsaas/types` - Shared TypeScript types
+- `langchain` - AI orchestration (for chat features)
+- `@aws-sdk/*` - AWS SDK v3 clients
+
+### External
+- `zod` - Schema validation
+- `dynamodb-doc` - DynamoDB Document Client convenience
+- `uuid` - Message/ID generation
+
+## OpenAPI Summary (planned)
+
+Paths Item: 
+- /chat/public (GET, POST)
+- /chat/public/{id} (GET)
+- /credits/balance (GET)
+- /credits/debit (POST)
+- /credits/replenish (POST)
+- /plans/available (GET)
+- /plans/subscribe (POST)
+- /plans/user/{userId} (GET)
+- /content/publish (POST)
+- /content/{id} (GET)
+
+All responses include standardized error format and success schema.
