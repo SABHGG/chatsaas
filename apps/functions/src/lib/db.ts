@@ -44,15 +44,34 @@ export { TABLES }
 
 /**
  * Put an item into a table. Returns the raw PutCommand output.
+ *
+ * When `options.conditionExpression` is provided, the PutItem is conditional
+ * (e.g. `attribute_not_exists(pk)` to enforce create-only). Throws
+ * `ConditionalCheckFailedException` when the condition is not met.
  */
 export async function put(
   tableName: string,
-  item: Record<string, any>
+  item: Record<string, any>,
+  options: {
+    conditionExpression?: string
+    expressionAttributeNames?: Record<string, string>
+    expressionAttributeValues?: Record<string, any>
+  } = {}
 ): Promise<Record<string, any>> {
-  const command = new PutCommand({
+  const input: ConstructorParameters<typeof PutCommand>[0] = {
     TableName: tableName,
     Item: item,
-  })
+  }
+  if (options.conditionExpression) {
+    input.ConditionExpression = options.conditionExpression
+  }
+  if (options.expressionAttributeNames) {
+    input.ExpressionAttributeNames = options.expressionAttributeNames
+  }
+  if (options.expressionAttributeValues) {
+    input.ExpressionAttributeValues = options.expressionAttributeValues
+  }
+  const command = new PutCommand(input)
   const response = await dynamoDB.send(command)
   return response as Record<string, any>
 }

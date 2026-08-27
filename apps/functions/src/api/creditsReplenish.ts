@@ -85,18 +85,26 @@ export async function creditsReplenishFactory(preHook?: UserPreHook) {
           throw err
         }
       } else {
-        // Create the credit record. The condition prevents overwriting a
-        // concurrent create from another request.
+        // Create the credit record. The condition `attribute_not_exists(userId)`
+        // makes this create-only: if a concurrent request beat us to it, the
+        // PutItem is rejected and we fall through to the atomic increment path
+        // so the first request's amount is not lost.
         try {
-          await put(TABLES.CREDITS, {
-            userId,
-            balance: amount,
-            createdAt: now,
-            updatedAt: now,
-          })
+          await put(
+            TABLES.CREDITS,
+            {
+              userId,
+              balance: amount,
+              createdAt: now,
+              updatedAt: now,
+            },
+            {
+              conditionExpression: 'attribute_not_exists(userId)',
+            }
+          )
         } catch (err) {
           if (err instanceof ConditionalCheckFailedException) {
-            // Another request created the record first; retry as an increment.
+            // Concurrent create happened first; merge via atomic increment.
             const attrs = await updateExpr(
               TABLES.CREDITS,
               { userId },

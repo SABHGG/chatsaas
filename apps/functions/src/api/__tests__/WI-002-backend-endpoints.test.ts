@@ -22,7 +22,7 @@ vi.mock('@/lib/db', () => ({
 }))
 
 // Bring the mocked helpers into scope so we can configure them per-test.
-import { scan, put, get, updateExpr, query } from '@/lib/db'
+import { scan, put, get, updateExpr, query, del } from '@/lib/db'
 import { fakeUserHook } from '../hooks'
 
 // Handler factories
@@ -276,6 +276,81 @@ describe('WI-002: Backend Endpoints Fastify', () => {
       expect(data.error).toBe('Plan not found')
       await fastify.close()
     })
+
+    it('should switch plans via delete+put when the planId changes', async () => {
+      const mockPlan = {
+        id: 'plan-2',
+        name: 'Pro',
+        price: 19.99,
+        interval: 'monthly',
+      }
+      const existingSub = {
+        id: 'sub-001',
+        userId: TEST_USER,
+        planId: 'plan-1',
+        status: 'active',
+        startedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      }
+      ;(get as any).mockResolvedValueOnce(mockPlan)
+      ;(query as any).mockResolvedValueOnce([existingSub])
+      ;(del as any).mockResolvedValueOnce({})
+      ;(put as any).mockResolvedValueOnce({})
+
+      const fastify = await plansSubscribe.plansSubscribeFactory(userHook)
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/',
+        payload: { planId: 'plan-2' },
+      })
+
+      expect(response.statusCode).toBe(200)
+      const data = JSON.parse(response.payload)
+      expect(data.data.planId).toBe('plan-2')
+      // The old subscription must have been deleted before the new one was put.
+      expect(del).toHaveBeenCalledWith('subscriptions', {
+        userId: TEST_USER,
+        planId: 'plan-1',
+      })
+      await fastify.close()
+    })
+
+    it('should bump currentPeriodEnd via updateExpr when re-subscribing to the same plan', async () => {
+      const mockPlan = {
+        id: 'plan-1',
+        name: 'Basic',
+        price: 9.99,
+        interval: 'monthly',
+      }
+      const existingSub = {
+        id: 'sub-001',
+        userId: TEST_USER,
+        planId: 'plan-1',
+        status: 'active',
+        startedAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
+      }
+      ;(get as any).mockResolvedValueOnce(mockPlan)
+      ;(query as any).mockResolvedValueOnce([existingSub])
+      ;(updateExpr as any).mockResolvedValueOnce({})
+
+      const fastify = await plansSubscribe.plansSubscribeFactory(userHook)
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/',
+        payload: { planId: 'plan-1' },
+      })
+
+      expect(response.statusCode).toBe(200)
+      // No delete+put when the plan hasn't changed.
+      expect(del).not.toHaveBeenCalled()
+      expect(put).not.toHaveBeenCalled()
+      expect(updateExpr).toHaveBeenCalledWith(
+        'subscriptions',
+        { userId: TEST_USER, planId: 'plan-1' },
+        expect.stringContaining('currentPeriodEnd'),
+        expect.objectContaining({ ':status': 'active' })
+      )
+      await fastify.close()
+    })
   })
 
   describe('creditsReplenish', () => {
@@ -315,6 +390,50 @@ describe('WI-002: Backend Endpoints Fastify', () => {
       const data = JSON.parse(response.payload)
       expect(data.success).toBe(true)
       expect(data.data.newBalance).toBe(75)
+      // The create path must use a conditional put so concurrent first-time
+      // replenishments can't silently overwrite each other.
+      expect(put).toHaveBeenCalledWith(
+        'credits',
+        expect.objectContaining({ userId: TEST_USER, balance: 75 }),
+        expect.objectContaining({
+          conditionExpression: 'attribute_not_exists(userId)',
+        })
+      )
+      await fastify.close()
+    })
+
+    it('should merge via atomic increment when a concurrent create beats us to it', async () => {
+      // First call sees no record, tries to put; a concurrent request already
+      // put it, so ConditionalCheckFailedException is thrown. The handler must
+      // fall through to an atomic increment instead of losing the first amount.
+      ;(get as any).mockResolvedValueOnce(undefined)
+      const condErr = new ConditionalCheckFailedException({
+        $metadata: {},
+        message: 'already exists',
+      })
+      ;(put as any).mockRejectedValueOnce(condErr)
+      ;(updateExpr as any).mockResolvedValueOnce({
+        userId: TEST_USER,
+        balance: 125, // 50 from the other writer + 75 from us
+      })
+
+      const fastify = await creditsReplenish.creditsReplenishFactory(userHook)
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/replenish',
+        payload: { amount: 75 },
+      })
+
+      expect(response.statusCode).toBe(200)
+      const data = JSON.parse(response.payload)
+      expect(data.success).toBe(true)
+      expect(data.data.newBalance).toBe(125)
+      expect(updateExpr).toHaveBeenCalledWith(
+        'credits',
+        { userId: TEST_USER },
+        'SET balance = balance + :amount, updatedAt = :now',
+        expect.objectContaining({ ':amount': 75 })
+      )
       await fastify.close()
     })
   })

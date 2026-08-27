@@ -1,6 +1,6 @@
 import Fastify from 'fastify'
 import { v4 as uuidv4 } from 'uuid'
-import { get, put, updateExpr, query, TABLES } from '@/lib/db'
+import { get, put, updateExpr, query, del, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
 // Maps a plan interval label to a number of days. Plans with unknown
@@ -84,28 +84,47 @@ export async function plansSubscribeFactory(preHook?: UserPreHook) {
         Date.now() + days * 24 * 60 * 60 * 1000
       ).toISOString()
 
-      // Look up an existing subscription by partition key.
+      // Look up an existing subscription by partition key. The schema declares
+      // PK=userId, SK=planId, so a query against userId returns all of a
+      // user's subscriptions (in practice one active row today).
       const existingList = await query(TABLES.SUBSCRIPTIONS, 'userId', userId)
       const existing = existingList[0]
 
-      if (existing) {
+      if (existing && existing.planId !== planId) {
+        // Plan change: DynamoDB forbids updating a key attribute in place, so
+        // we delete the old row and put the new one. The `del` is best-effort;
+        // if it fails because the row was already removed by a concurrent
+        // request we proceed with the put.
+        try {
+          await del(TABLES.SUBSCRIPTIONS, {
+            userId,
+            planId: existing.planId,
+          })
+        } catch {
+          // Ignore: another writer may have removed the old row.
+        }
+        await put(TABLES.SUBSCRIPTIONS, {
+          id: uuidv4(),
+          userId,
+          planId,
+          status: 'active',
+          startedAt: existing.startedAt || now,
+          currentPeriodEnd,
+        })
+      } else if (existing && existing.planId === planId) {
+        // Same plan — just bump the period end atomically.
         await updateExpr(
           TABLES.SUBSCRIPTIONS,
-          { userId, planId: existing.planId },
-          'SET planId = :planId, #s = :status, startedAt = :startedAt, currentPeriodEnd = :cpe, updatedAt = :now',
+          { userId, planId },
+          'SET #s = :status, currentPeriodEnd = :cpe, updatedAt = :now',
           {
-            ':planId': planId,
             ':status': 'active',
-            ':startedAt': existing.startedAt || now,
             ':cpe': currentPeriodEnd,
             ':now': now,
           }
         )
-        // Note: the current schema uses userId+planId as composite key, so
-        // updating the sort key requires a delete+put in DynamoDB. For now we
-        // leave planId unchanged in the key and store the desired planId as a
-        // regular attribute. A follow-up WI can migrate to userId-only key.
       } else {
+        // No existing subscription — create.
         await put(TABLES.SUBSCRIPTIONS, {
           id: uuidv4(),
           userId,
