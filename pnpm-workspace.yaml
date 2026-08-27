@@ -3,5 +3,5 @@ packages:
   - "packages/*"
   - "infra"
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true
   unrs-resolver: false

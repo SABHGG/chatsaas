@@ -32,6 +32,14 @@ export interface CognitoAccessTokenClaims {
 /**
  * The request.user shape populated by the verifyCognitoJwt hook. Other
  * handlers read `request.user.sub` (and, later, `request.user.companyId`).
+ *
+ * SECURITY NOTE — `companyId` MUST NOT be used as the sole basis for
+ * tenant authorization. The `custom:company_id` attribute is a
+ * user-pool attribute that any end user in the pool can self-service
+ * (via the standard Cognito attribute-update flow). It is surfaced here
+ * for UX display only. Tenant-scoped authorization must be derived from
+ * `sub` against a server-controlled mapping table (DynamoDB / Cognito
+ * Group membership) in a follow-up WI.
  */
 export interface AuthenticatedUser {
   sub: string

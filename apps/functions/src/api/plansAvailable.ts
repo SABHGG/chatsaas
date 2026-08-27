@@ -45,10 +45,26 @@ const plansAvailablePlugin: FastifyPluginAsync<PluginOpts> = async (
             },
             required: ['success', 'data'],
           },
+          401: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
         },
       },
     },
-    async () => {
+    async (request, reply) => {
+      const userId = (request as { user?: { sub?: string } }).user?.sub
+      if (!userId) {
+        return reply.code(401).send({
+          success: false,
+          error: 'Unauthenticated',
+          code: 'UNAUTHENTICATED',
+        })
+      }
       const items = await scan<{ active?: boolean }>(TABLES.PLANS)
       const activePlans = items.filter((item) => item.active === true)
       return { success: true, data: activePlans }

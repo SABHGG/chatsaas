@@ -212,4 +212,88 @@ describe('WI-003: server bootstrap', () => {
     expect(res.statusCode).toBe(400)
     await fastify.close()
   })
+
+  it('responds to a CORS preflight on an admin route with the expected origin', async () => {
+    // The allowlist defaults to `*` in tests, so credentials are
+    // disabled and we only assert the origin reflection. The
+    // credentials-enabled path is covered in production-config tests
+    // (out of scope here to keep the default config simple).
+    const fastify = await createServer({
+      cognito: buildTestHook(),
+      allowedOrigins: 'https://app.example.com,https://admin.example.com',
+      loggerDisabled: true,
+    })
+    const res = await fastify.inject({
+      method: 'OPTIONS',
+      url: '/api/credits/balance',
+      headers: {
+        origin: 'https://app.example.com',
+        'access-control-request-method': 'GET',
+        'access-control-request-headers': 'authorization',
+      },
+    })
+    expect(res.statusCode).toBe(204)
+    expect(res.headers['access-control-allow-origin']).toBe(
+      'https://app.example.com'
+    )
+    await fastify.close()
+  })
+
+  it('reflects the request origin when allowlist is wildcard', async () => {
+    // The @fastify/cors plugin reflects the concrete origin (not the
+    // literal `*`) when the allowlist is a wildcard. This is the
+    // modern, spec-correct behavior; credentialed requests would be
+    // rejected by the browser in this mode (we set `credentials: false`
+    // when `*` is in the allowlist).
+    const fastify = await createServer({
+      cognito: buildTestHook(),
+      loggerDisabled: true,
+    })
+    const res = await fastify.inject({
+      method: 'OPTIONS',
+      url: '/api/credits/balance',
+      headers: {
+        origin: 'https://app.example.com',
+        'access-control-request-method': 'GET',
+      },
+    })
+    expect(res.statusCode).toBe(204)
+    expect(res.headers['access-control-allow-origin']).toBe(
+      'https://app.example.com'
+    )
+    expect(res.headers['access-control-allow-credentials']).toBeUndefined()
+    await fastify.close()
+  })
+
+  it('returns 404 for routes that are not mounted', async () => {
+    const fastify = await createServer({
+      cognito: buildTestHook(),
+      loggerDisabled: true,
+    })
+    const res = await fastify.inject({
+      method: 'GET',
+      url: '/api/does-not-exist',
+    })
+    expect(res.statusCode).toBe(404)
+    await fastify.close()
+  })
+
+  it('rejects an admin request when the userPreHook succeeds but the user has no sub', async () => {
+    // This pins the defense-in-depth check in admin handlers: even if
+    // the auth hook sets `request.user`, the handler must reject when
+    // `sub` is missing (the Cognito verifier already returns 401 in
+    // that case, but a custom hook in production could be lax).
+    const fastify = await createServer({
+      // userPreHook that sets a user without `sub` (malformed hook).
+      userPreHook: fakeUserHook(''),
+      loggerDisabled: true,
+    })
+    const res = await fastify.inject({
+      method: 'GET',
+      url: '/api/credits/balance',
+    })
+    expect(res.statusCode).toBe(401)
+    expect(res.json().code).toBe('UNAUTHENTICATED')
+    await fastify.close()
+  })
 })

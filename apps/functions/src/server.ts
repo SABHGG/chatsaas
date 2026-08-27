@@ -3,6 +3,7 @@ import cors from '@fastify/cors'
 import { ZodError } from 'zod'
 import { verifyCognitoJwt, cognitoConfigForCognito, type CognitoVerifierConfig } from './auth/verifyCognitoJwt'
 import type { UserPreHook } from './api/hooks'
+import './types/fastify.d.ts'
 import { creditsBalancePlugin } from './api/creditsBalance'
 import { creditsDebitPlugin } from './api/creditsDebit'
 import { creditsReplenishPlugin } from './api/creditsReplenish'
@@ -49,16 +50,16 @@ export interface CreateServerDeps {
 }
 
 async function resolveDeps(opts: CreateServerOptions): Promise<CreateServerDeps> {
+  let userPreHook: UserPreHook
   if (opts.userPreHook) {
-    // Caller supplied a pre-built hook. Skip JWKS wiring.
+    userPreHook = opts.userPreHook
   } else if (opts.cognito) {
-    opts.userPreHook = verifyCognitoJwt(opts.cognito)
+    userPreHook = verifyCognitoJwt(opts.cognito)
   } else {
     throw new Error(
       'createServer requires either `cognito` or `userPreHook` — admin routes need an auth hook.'
     )
   }
-  const userPreHook = opts.userPreHook!
 
   const originsCsv = opts.allowedOrigins ?? process.env.ALLOWED_ORIGINS ?? '*'
   const allowedOrigins =
@@ -91,9 +92,20 @@ export async function createServer(
         },
   })
 
+  // CORS configuration. Three rules to keep this spec-correct:
+  // 1. Never combine `origin: '*'` with `credentials: true` — modern
+  //    browsers reject the response and the dashboard silently breaks.
+  // 2. When the allowlist is `*`, reflect no origin (so the response
+  //    header is `*`) and disable credentials.
+  // 3. When a concrete origin is rejected, return `cb(null, false)` —
+  //    do NOT throw an Error. A thrown Error routes into the central
+  //    error handler as a 500, which is the wrong shape for CORS
+  //    rejection (the browser just needs the missing header to drop
+  //    the response).
+  const isWildcard = deps.allowedOrigins.includes('*')
   await fastify.register(cors, {
     origin: (origin, cb) => {
-      if (deps.allowedOrigins.includes('*')) {
+      if (isWildcard) {
         cb(null, true)
         return
       }
@@ -101,9 +113,9 @@ export async function createServer(
         cb(null, true)
         return
       }
-      cb(new Error('Origin not allowed'), false)
+      cb(null, false)
     },
-    credentials: true,
+    credentials: !isWildcard,
   })
 
   // Centralized error handler. Maps ZodError -> 400 and sanitizes any

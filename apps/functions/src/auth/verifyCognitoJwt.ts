@@ -89,9 +89,28 @@ export function verifyCognitoJwt(config: CognitoVerifierConfig): UserPreHook {
     }
 
     if (claims.token_use !== 'access') {
+      // Same envelope as the other 401s to avoid leaking the policy
+      // distinction between id tokens and access tokens.
+      request.log.warn(
+        { tokenUse: claims.token_use },
+        'cognito jwt rejected: not an access token'
+      )
       return reply.code(401).send({
         success: false,
-        error: 'Only access tokens are accepted',
+        error: 'Invalid or expired token',
+        code: 'UNAUTHENTICATED',
+      })
+    }
+
+    if (typeof claims.sub !== 'string' || claims.sub.length === 0) {
+      // Cognito access tokens always carry `sub`; an absent one means a
+      // misconfigured client or a forged token that bypassed the issuer
+      // check. Fail closed here so downstream handlers never see an
+      // empty `request.user.sub`.
+      request.log.warn('cognito jwt rejected: missing or empty sub claim')
+      return reply.code(401).send({
+        success: false,
+        error: 'Invalid or expired token',
         code: 'UNAUTHENTICATED',
       })
     }
