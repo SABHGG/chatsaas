@@ -1,4 +1,5 @@
 import Fastify from 'fastify'
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 import { v4 as uuidv4 } from 'uuid'
 import { get, put, updateExpr, query, del, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
@@ -92,16 +93,19 @@ export async function plansSubscribeFactory(preHook?: UserPreHook) {
 
       if (existing && existing.planId !== planId) {
         // Plan change: DynamoDB forbids updating a key attribute in place, so
-        // we delete the old row and put the new one. The `del` is best-effort;
-        // if it fails because the row was already removed by a concurrent
-        // request we proceed with the put.
+        // we delete the old row and put the new one. Only the "row already
+        // gone" race is tolerated — any other error (throttling, network, 5xx)
+        // is re-thrown so the caller can retry or surface a 5xx instead of
+        // silently drifting into a dual-subscription state.
         try {
           await del(TABLES.SUBSCRIPTIONS, {
             userId,
             planId: existing.planId,
           })
-        } catch {
-          // Ignore: another writer may have removed the old row.
+        } catch (err) {
+          if (!(err instanceof ConditionalCheckFailedException)) {
+            throw err
+          }
         }
         await put(TABLES.SUBSCRIPTIONS, {
           id: uuidv4(),

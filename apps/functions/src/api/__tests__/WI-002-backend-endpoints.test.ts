@@ -311,6 +311,47 @@ describe('WI-002: Backend Endpoints Fastify', () => {
         userId: TEST_USER,
         planId: 'plan-1',
       })
+      // Enforce the order: del must be called before put, otherwise the old
+      // subscription row would be left orphaned under a future refactor.
+      const delOrder = (del as any).mock.invocationCallOrder[0]
+      const putOrder = (put as any).mock.invocationCallOrder[0]
+      expect(delOrder).toBeLessThan(putOrder)
+      await fastify.close()
+    })
+
+    it('should re-throw non-conditional errors from the plan-change del', async () => {
+      const mockPlan = {
+        id: 'plan-2',
+        name: 'Pro',
+        price: 19.99,
+        interval: 'monthly',
+      }
+      const existingSub = {
+        id: 'sub-001',
+        userId: TEST_USER,
+        planId: 'plan-1',
+        status: 'active',
+        startedAt: new Date().toISOString(),
+      }
+      ;(get as any).mockResolvedValueOnce(mockPlan)
+      ;(query as any).mockResolvedValueOnce([existingSub])
+      // A transient DynamoDB throttling error (not ConditionalCheckFailedException)
+      // must NOT be silently swallowed — it would leave the old row in place and
+      // the subsequent put would 500 anyway. We want the 500 to come from del
+      // so the caller can retry the whole operation cleanly.
+      const transientErr = new Error('ProvisionedThroughputExceededException')
+      ;(del as any).mockRejectedValueOnce(transientErr)
+
+      const fastify = await plansSubscribe.plansSubscribeFactory(userHook)
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/',
+        payload: { planId: 'plan-2' },
+      })
+
+      // Fastify maps unhandled errors to 500.
+      expect(response.statusCode).toBe(500)
+      expect(put).not.toHaveBeenCalled()
       await fastify.close()
     })
 
