@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
-import { scan, put, update, TABLES } from '@/lib/db'
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
+import { get, put, updateExpr, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
 export async function creditsReplenishFactory(preHook?: UserPreHook) {
@@ -19,7 +20,7 @@ export async function creditsReplenishFactory(preHook?: UserPreHook) {
         body: {
           type: 'object',
           properties: {
-            amount: { type: 'number', minimum: 1 },
+            amount: { type: 'integer', minimum: 1 },
           },
           required: ['amount'],
           additionalProperties: false,
@@ -40,6 +41,14 @@ export async function creditsReplenishFactory(preHook?: UserPreHook) {
             },
             required: ['success', 'data'],
           },
+          404: {
+            type: 'object',
+            properties: {
+              success: { type: 'boolean' },
+              error: { type: 'string' },
+              code: { type: 'string' },
+            },
+          },
         },
       },
     },
@@ -48,23 +57,59 @@ export async function creditsReplenishFactory(preHook?: UserPreHook) {
       const userId = (request as any).user?.sub || 'anonymous'
       const now = new Date().toISOString()
 
-      const items = await scan<any>(TABLES.CREDITS)
-      const credit = items.find((item) => item.userId === userId)
+      // Check if a credit record exists.
+      const existing = await get(TABLES.CREDITS, { userId })
 
-      if (credit) {
-        const newBalance = credit.balance + amount
-        await update(TABLES.CREDITS, { userId }, { balance: newBalance, updatedAt: now })
-        return {
-          success: true,
-          data: { newBalance },
+      if (existing) {
+        // Atomic increment with condition that the row still exists.
+        try {
+          const attrs = await updateExpr(
+            TABLES.CREDITS,
+            { userId },
+            'SET balance = balance + :amount, updatedAt = :now',
+            { ':amount': amount, ':now': now },
+            'attribute_exists(userId)'
+          )
+          return {
+            success: true,
+            data: { newBalance: attrs.balance },
+          }
+        } catch (err) {
+          if (err instanceof ConditionalCheckFailedException) {
+            return reply.code(404).send({
+              success: false,
+              error: 'Credit record disappeared during replenish',
+              code: 'NOT_FOUND',
+            })
+          }
+          throw err
         }
       } else {
-        await put(TABLES.CREDITS, {
-          userId,
-          balance: amount,
-          createdAt: now,
-          updatedAt: now,
-        })
+        // Create the credit record. The condition prevents overwriting a
+        // concurrent create from another request.
+        try {
+          await put(TABLES.CREDITS, {
+            userId,
+            balance: amount,
+            createdAt: now,
+            updatedAt: now,
+          })
+        } catch (err) {
+          if (err instanceof ConditionalCheckFailedException) {
+            // Another request created the record first; retry as an increment.
+            const attrs = await updateExpr(
+              TABLES.CREDITS,
+              { userId },
+              'SET balance = balance + :amount, updatedAt = :now',
+              { ':amount': amount, ':now': now }
+            )
+            return {
+              success: true,
+              data: { newBalance: attrs.balance },
+            }
+          }
+          throw err
+        }
         return {
           success: true,
           data: { newBalance: amount },

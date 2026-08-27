@@ -1,5 +1,5 @@
 import Fastify from 'fastify'
-import { scan, TABLES } from '@/lib/db'
+import { get, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
 export async function contentGetFactory(preHook?: UserPreHook) {
@@ -57,8 +57,7 @@ export async function contentGetFactory(preHook?: UserPreHook) {
     async (request, reply) => {
       const { id } = request.params as { id: string }
 
-      const items = await scan<any>(TABLES.CONTENT)
-      const content = items.find((item) => item.id === id)
+      const content = await get(TABLES.CONTENT, { id })
 
       if (!content) {
         return reply.code(404).send({

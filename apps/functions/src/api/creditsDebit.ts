@@ -1,5 +1,6 @@
 import Fastify from 'fastify'
-import { scan, update, TABLES } from '@/lib/db'
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
+import { get, updateExpr, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
 export async function creditsDebitFactory(preHook?: UserPreHook) {
@@ -19,7 +20,7 @@ export async function creditsDebitFactory(preHook?: UserPreHook) {
         body: {
           type: 'object',
           properties: {
-            amount: { type: 'number', minimum: 1 },
+            amount: { type: 'integer', minimum: 1 },
             reason: { type: 'string', nullable: true },
           },
           required: ['amount'],
@@ -56,23 +57,28 @@ export async function creditsDebitFactory(preHook?: UserPreHook) {
       const { amount } = request.body as { amount: number }
       const userId = (request as any).user?.sub || 'anonymous'
 
-      const items = await scan<any>(TABLES.CREDITS)
-      const credit = items.find((item) => item.userId === userId)
+      try {
+        const attrs = await updateExpr(
+          TABLES.CREDITS,
+          { userId },
+          'SET balance = balance - :amount',
+          { ':amount': amount },
+          'balance >= :amount AND attribute_exists(userId)'
+        )
 
-      if (!credit || credit.balance < amount) {
-        return reply.code(402).send({
-          success: false,
-          error: 'Insufficient credits',
-          code: 'INSUFFICIENT_CREDITS',
-        })
-      }
-
-      const newBalance = credit.balance - amount
-      await update(TABLES.CREDITS, { userId }, { balance: newBalance })
-
-      return {
-        success: true,
-        data: { newBalance },
+        return {
+          success: true,
+          data: { newBalance: attrs.balance },
+        }
+      } catch (err) {
+        if (err instanceof ConditionalCheckFailedException) {
+          return reply.code(402).send({
+            success: false,
+            error: 'Insufficient credits',
+            code: 'INSUFFICIENT_CREDITS',
+          })
+        }
+        throw err
       }
     }
   )

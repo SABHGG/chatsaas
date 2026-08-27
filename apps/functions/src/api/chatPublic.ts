@@ -17,6 +17,13 @@ export async function chatPublicFactory(preHook?: UserPreHook) {
       schema: {
         tags: ['Chat'],
         summary: 'List recent public messages',
+        querystring: {
+          type: 'object',
+          properties: {
+            limit: { type: 'integer', minimum: 1, maximum: 100, default: 50 },
+          },
+          additionalProperties: false,
+        },
         response: {
           200: {
             type: 'object',
@@ -44,7 +51,7 @@ export async function chatPublicFactory(preHook?: UserPreHook) {
       },
     },
     async (request, reply) => {
-      const limit = Number((request.query as any)?.limit) || 50
+      const limit = (request.query as { limit?: number }).limit ?? 50
       const items = await scan<any>(TABLES.CHAT_MESSAGES)
       const messages = items
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -105,13 +112,18 @@ export async function chatPublicFactory(preHook?: UserPreHook) {
         username?: string
       }
 
-      const message = {
+      const message: Record<string, any> = {
         id: uuidv4(),
         content,
-        username,
         type: 'text',
         createdAt: new Date().toISOString(),
         userId: (request as any).user?.sub || 'anonymous',
+      }
+      // Only include username when defined; the DocumentClient is configured
+      // with removeUndefinedValues:true, but explicit omission keeps the stored
+      // shape clean and the response mapping trivial.
+      if (username !== undefined) {
+        message.username = username
       }
 
       await put(TABLES.CHAT_MESSAGES, message)
@@ -121,7 +133,7 @@ export async function chatPublicFactory(preHook?: UserPreHook) {
         data: {
           id: message.id,
           content: message.content,
-          username: message.username,
+          username: message.username ?? null,
           createdAt: message.createdAt,
           type: message.type,
         },

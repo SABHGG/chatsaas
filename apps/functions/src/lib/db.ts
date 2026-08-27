@@ -8,6 +8,7 @@ import {
   ScanCommand,
   QueryCommand,
 } from '@aws-sdk/lib-dynamodb'
+import type { UpdateCommandInput } from '@aws-sdk/lib-dynamodb'
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
 import { TABLES } from '@/db/schema'
 
@@ -24,7 +25,7 @@ export const dynamoDBClient = new DynamoDBClient({
 // map — the DocumentClient handles the conversion.
 export const dynamoDB = DynamoDBDocumentClient.from(dynamoDBClient, {
   marshallOptions: {
-    removeUndefinedValues: false,
+    removeUndefinedValues: true,
   },
   unmarshallOptions: {
     wrapNumbers: false,
@@ -111,6 +112,36 @@ export async function update(
     ExpressionAttributeValues: expressionAttributeValues,
     ReturnValues: 'ALL_NEW',
   })
+  const response = await dynamoDB.send(command)
+  return (response as { Attributes?: Record<string, any> }).Attributes ?? {}
+}
+
+/**
+ * Update with a raw UpdateExpression and optional ConditionExpression.
+ * Use this for atomic operations like `SET balance = balance - :amount`
+ * where the update expression is not a simple key-value assignment.
+ *
+ * Throws ConditionalCheckFailedException when the condition is not met.
+ * Catch it in the handler to return a domain-specific error (e.g. 402).
+ */
+export async function updateExpr(
+  tableName: string,
+  key: Record<string, any>,
+  updateExpression: string,
+  expressionAttributeValues: Record<string, any>,
+  conditionExpression?: string
+): Promise<Record<string, any>> {
+  const input: UpdateCommandInput = {
+    TableName: tableName,
+    Key: key,
+    UpdateExpression: updateExpression,
+    ExpressionAttributeValues: expressionAttributeValues,
+    ReturnValues: 'ALL_NEW',
+  }
+  if (conditionExpression) {
+    input.ConditionExpression = conditionExpression
+  }
+  const command = new UpdateCommand(input)
   const response = await dynamoDB.send(command)
   return (response as { Attributes?: Record<string, any> }).Attributes ?? {}
 }

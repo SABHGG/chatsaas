@@ -1,5 +1,5 @@
 import Fastify from 'fastify'
-import { scan, TABLES } from '@/lib/db'
+import { get, TABLES } from '@/lib/db'
 import type { UserPreHook } from './hooks'
 
 export async function creditsBalanceFactory(preHook?: UserPreHook) {
@@ -38,9 +38,7 @@ export async function creditsBalanceFactory(preHook?: UserPreHook) {
     async (request, reply) => {
       const userId = (request as any).user?.sub || 'anonymous'
 
-      const items = await scan<any>(TABLES.CREDITS)
-      const credit = items.find((item) => item.userId === userId)
-
+      const credit = await get(TABLES.CREDITS, { userId })
       const balance = credit ? credit.balance : 0
       return { success: true, data: { balance } }
     }
@@ -48,4 +46,3 @@ export async function creditsBalanceFactory(preHook?: UserPreHook) {
 
   return fastify
 }
-

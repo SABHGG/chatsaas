@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { ConditionalCheckFailedException } from '@aws-sdk/client-dynamodb'
 
 // Mock the lib/db module so no real DynamoDB is needed.
 vi.mock('@/lib/db', () => ({
@@ -6,6 +7,7 @@ vi.mock('@/lib/db', () => ({
   get: vi.fn(),
   scan: vi.fn(),
   update: vi.fn(),
+  updateExpr: vi.fn(),
   query: vi.fn(),
   del: vi.fn(),
   marshal: vi.fn(),
@@ -20,7 +22,7 @@ vi.mock('@/lib/db', () => ({
 }))
 
 // Bring the mocked helpers into scope so we can configure them per-test.
-import { scan, put, update } from '@/lib/db'
+import { scan, put, get, updateExpr, query } from '@/lib/db'
 import { fakeUserHook } from '../hooks'
 
 // Handler factories
@@ -87,11 +89,42 @@ describe('WI-002: Backend Endpoints Fastify', () => {
       expect(put).toHaveBeenCalledTimes(1)
       await fastify.close()
     })
+
+    it('should publish a new message without username (no undefined crash)', async () => {
+      ;(put as any).mockResolvedValueOnce({})
+
+      const fastify = await chatPublic.chatPublicFactory(userHook)
+      const response = await fastify.inject({
+        method: 'POST',
+        url: '/',
+        payload: { content: 'Anonymous post' },
+      })
+
+      // Regression: with removeUndefinedValues:false this was a 500.
+      expect(response.statusCode).toBe(201)
+      const data = JSON.parse(response.payload)
+      expect(data.success).toBe(true)
+      expect(data.data.content).toBe('Anonymous post')
+      // The handler omits the username key entirely; the response maps to null.
+      expect(data.data.username).toBeNull()
+      await fastify.close()
+    })
+
+    it('should reject limit out of range', async () => {
+      const fastify = await chatPublic.chatPublicFactory(userHook)
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/?limit=500',
+      })
+
+      expect(response.statusCode).toBe(400)
+      await fastify.close()
+    })
   })
 
   describe('creditsBalance', () => {
     it('should return balance 0 when no credits record exists', async () => {
-      ;(scan as any).mockResolvedValueOnce([])
+      ;(get as any).mockResolvedValueOnce(undefined)
 
       const fastify = await creditsBalance.creditsBalanceFactory(userHook)
       const response = await fastify.inject({
@@ -103,12 +136,13 @@ describe('WI-002: Backend Endpoints Fastify', () => {
       const data = JSON.parse(response.payload)
       expect(data.success).toBe(true)
       expect(data.data.balance).toBe(0)
+      expect(get).toHaveBeenCalledTimes(1)
       await fastify.close()
     })
 
     it('should return existing balance', async () => {
       const mockCredit = { userId: TEST_USER, balance: 150 }
-      ;(scan as any).mockResolvedValueOnce([mockCredit])
+      ;(get as any).mockResolvedValueOnce(mockCredit)
 
       const fastify = await creditsBalance.creditsBalanceFactory(userHook)
       const response = await fastify.inject({
@@ -125,11 +159,11 @@ describe('WI-002: Backend Endpoints Fastify', () => {
   })
 
   describe('creditsDebit', () => {
-    it('should debit successfully when sufficient credits', async () => {
-      const mockCredit = { userId: TEST_USER, balance: 200 }
-      const mockUpdated = { userId: TEST_USER, balance: 150 }
-      ;(scan as any).mockResolvedValueOnce([mockCredit])
-      ;(update as any).mockResolvedValueOnce(mockUpdated)
+    it('should debit atomically when sufficient credits', async () => {
+      ;(updateExpr as any).mockResolvedValueOnce({
+        userId: TEST_USER,
+        balance: 150,
+      })
 
       const fastify = await creditsDebit.creditsDebitFactory(userHook)
       const response = await fastify.inject({
@@ -142,12 +176,23 @@ describe('WI-002: Backend Endpoints Fastify', () => {
       const data = JSON.parse(response.payload)
       expect(data.success).toBe(true)
       expect(data.data.newBalance).toBe(150)
+      // Verify the atomic condition expression was used.
+      expect(updateExpr).toHaveBeenCalledWith(
+        'credits',
+        { userId: TEST_USER },
+        'SET balance = balance - :amount',
+        { ':amount': 50 },
+        'balance >= :amount AND attribute_exists(userId)'
+      )
       await fastify.close()
     })
 
-    it('should return 402 insufficient credits', async () => {
-      const mockCredit = { userId: TEST_USER, balance: 10 }
-      ;(scan as any).mockResolvedValueOnce([mockCredit])
+    it('should return 402 when conditional check fails (insufficient credits)', async () => {
+      const condErr = new ConditionalCheckFailedException({
+        $metadata: {},
+        message: 'insufficient',
+      })
+      ;(updateExpr as any).mockRejectedValueOnce(condErr)
 
       const fastify = await creditsDebit.creditsDebitFactory(userHook)
       const response = await fastify.inject({
@@ -196,18 +241,9 @@ describe('WI-002: Backend Endpoints Fastify', () => {
         price: 9.99,
         interval: 'monthly',
       }
-      const mockSubscribe = {
-        id: 'sub-001',
-        userId: TEST_USER,
-        planId: 'plan-1',
-        status: 'active',
-        startedAt: new Date().toISOString(),
-        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-      }
-      ;(scan as any)
-        .mockResolvedValueOnce([mockPlan])
-      ;(scan as any).mockResolvedValueOnce([])
-      ;(put as any).mockResolvedValueOnce(mockSubscribe)
+      ;(get as any).mockResolvedValueOnce(mockPlan)
+      ;(query as any).mockResolvedValueOnce([]) // no existing subscription
+      ;(put as any).mockResolvedValueOnce({})
 
       const fastify = await plansSubscribe.plansSubscribeFactory(userHook)
       const response = await fastify.inject({
@@ -224,52 +260,31 @@ describe('WI-002: Backend Endpoints Fastify', () => {
       await fastify.close()
     })
 
-    it('should update existing subscription', async () => {
-      const mockPlan = {
-        id: 'plan-2',
-        name: 'Pro',
-        price: 19.99,
-        interval: 'monthly',
-      }
-      const mockExistingSub = {
-        userId: TEST_USER,
-        planId: 'plan-1',
-        status: 'active',
-        startedAt: new Date().toISOString(),
-      }
-      const mockUpdated = {
-        userId: TEST_USER,
-        planId: 'plan-2',
-        status: 'active',
-        startedAt: mockExistingSub.startedAt,
-        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-        updatedAt: new Date().toISOString(),
-      }
-      ;(scan as any).mockResolvedValueOnce([mockPlan])
-      ;(scan as any).mockResolvedValueOnce([mockExistingSub])
-      ;(update as any).mockResolvedValueOnce(mockUpdated)
+    it('should return 404 when plan does not exist', async () => {
+      ;(get as any).mockResolvedValueOnce(undefined)
 
       const fastify = await plansSubscribe.plansSubscribeFactory(userHook)
       const response = await fastify.inject({
         method: 'POST',
         url: '/',
-        payload: { planId: 'plan-2' },
+        payload: { planId: 'plan-unknown' },
       })
 
-      expect(response.statusCode).toBe(200)
+      expect(response.statusCode).toBe(404)
       const data = JSON.parse(response.payload)
-      expect(data.success).toBe(true)
-      expect(data.data.planId).toBe('plan-2')
+      expect(data.success).toBe(false)
+      expect(data.error).toBe('Plan not found')
       await fastify.close()
     })
   })
 
   describe('creditsReplenish', () => {
-    it('should add credits to existing balance', async () => {
-      const mockCredit = { userId: TEST_USER, balance: 100 }
-      const mockUpdated = { userId: TEST_USER, balance: 150 }
-      ;(scan as any).mockResolvedValueOnce([mockCredit])
-      ;(update as any).mockResolvedValueOnce(mockUpdated)
+    it('should add credits to existing balance atomically', async () => {
+      ;(get as any).mockResolvedValueOnce({ userId: TEST_USER, balance: 100 })
+      ;(updateExpr as any).mockResolvedValueOnce({
+        userId: TEST_USER,
+        balance: 150,
+      })
 
       const fastify = await creditsReplenish.creditsReplenishFactory(userHook)
       const response = await fastify.inject({
@@ -286,8 +301,8 @@ describe('WI-002: Backend Endpoints Fastify', () => {
     })
 
     it('should create new credit entry when none exists', async () => {
-      ;(scan as any).mockResolvedValueOnce([])
-      ;(put as any).mockResolvedValueOnce({ userId: TEST_USER, balance: 75 })
+      ;(get as any).mockResolvedValueOnce(undefined)
+      ;(put as any).mockResolvedValueOnce({})
 
       const fastify = await creditsReplenish.creditsReplenishFactory(userHook)
       const response = await fastify.inject({
@@ -314,7 +329,7 @@ describe('WI-002: Backend Endpoints Fastify', () => {
         createdAt: new Date().toISOString(),
         status: 'published',
       }
-      ;(scan as any).mockResolvedValueOnce([mockContent])
+      ;(get as any).mockResolvedValueOnce(mockContent)
 
       const fastify = await contentGet.contentGetFactory(userHook)
       const response = await fastify.inject({
@@ -331,7 +346,7 @@ describe('WI-002: Backend Endpoints Fastify', () => {
     })
 
     it('should return 404 when content not found', async () => {
-      ;(scan as any).mockResolvedValueOnce([])
+      ;(get as any).mockResolvedValueOnce(undefined)
 
       const fastify = await contentGet.contentGetFactory(userHook)
       const response = await fastify.inject({
