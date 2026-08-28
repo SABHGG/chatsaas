@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "generatedAt": "2026-08-24T23:52:44.820Z",
+  "generatedAt": "2026-08-28T04:51:00.223Z",
   "project": {
     "name": "chatSaaS",
     "state": "new",
@@ -35,8 +35,6 @@
         "title": "Define public chatbot creation and publishing",
         "status": "ready",
         "lifecycle": "ready",
-        "status": "ready",
-        "lifecycle": "ready",
         "knowledgeLevel": "K2",
         "domains": [
           "Public Chatbot Delivery"
@@ -96,6 +94,23 @@
             "status": "unknown",
             "question": "What deployment, monitoring, and support model is required?"
           }
+        }
+      },
+      {
+        "id": "WI-004",
+        "type": "feature",
+        "title": "CDK app bootstrap with Aurora Serverless v2 + pgvector + RDS Proxy",
+        "status": "ready",
+        "lifecycle": "ready",
+        "knowledgeLevel": "K2",
+        "domains": [],
+        "source": {
+          "type": "unknown",
+          "id": "post-wi-003-decisions-2026-08-28",
+          "title": "CDK app bootstrap with Aurora Serverless v2 + pgvector",
+          "context": "Derived from the post-WI-003 decision set (Q1 Aurora + pgvector committed in ADR-004, Q3 ordered as Infra/CDK → Bedrock+RAG → Frontend). The current monorepo has CDK 2.266.0 declared in the ADR-003 stack but no CDK app, no infra stack files, and no `infra/` skeleton beyond the placeholder package.json. Without this WI, the Bedrock + pgvector RAG layer (WI-005+) has nothing to deploy against and no place to run the HNSW-indexed embeddings table.",
+          "inferred": true,
+          "reason": "Invalid source value: \"post-wi-003-decisions\"."
         }
       }
     ],
@@ -106,8 +121,6 @@
         "title": "Define public chatbot creation and publishing",
         "status": "ready",
         "lifecycle": "ready",
-        "status": "ready",
-        "lifecycle": "ready",
         "knowledgeLevel": "K2",
         "domains": [
           "Public Chatbot Delivery"
@@ -168,19 +181,171 @@
             "question": "What deployment, monitoring, and support model is required?"
           }
         }
+      },
+      {
+        "id": "WI-004",
+        "type": "feature",
+        "title": "CDK app bootstrap with Aurora Serverless v2 + pgvector + RDS Proxy",
+        "status": "ready",
+        "lifecycle": "ready",
+        "knowledgeLevel": "K2",
+        "domains": [],
+        "source": {
+          "type": "unknown",
+          "id": "post-wi-003-decisions-2026-08-28",
+          "title": "CDK app bootstrap with Aurora Serverless v2 + pgvector",
+          "context": "Derived from the post-WI-003 decision set (Q1 Aurora + pgvector committed in ADR-004, Q3 ordered as Infra/CDK → Bedrock+RAG → Frontend). The current monorepo has CDK 2.266.0 declared in the ADR-003 stack but no CDK app, no infra stack files, and no `infra/` skeleton beyond the placeholder package.json. Without this WI, the Bedrock + pgvector RAG layer (WI-005+) has nothing to deploy against and no place to run the HNSW-indexed embeddings table.",
+          "inferred": true,
+          "reason": "Invalid source value: \"post-wi-003-decisions\"."
+        }
       }
     ],
-    "completedWorkItems": [],
+    "completedWorkItems": [
+      {
+        "id": "WI-003",
+        "type": "feature",
+        "title": "Server bootstrap with Cognito JWT verifier and route registration",
+        "status": "completed",
+        "lifecycle": "completed",
+        "knowledgeLevel": "K2",
+        "domains": [],
+        "source": {
+          "type": "unknown",
+          "id": "judgment-day-WI-002-round-1",
+          "title": "Server bootstrap with Cognito JWT verifier and route registration",
+          "context": "Derived from Judgment Day Round 1/2 findings on feature/WI-002-backend-endpoints: B-1 (CRITICAL — no production auth, every handler defaults to a shared 'anonymous' tenant) and A-9 (INFO — no server bootstrap wires the 7 factories). The current branch ships 7 isolated handler factories with no Fastify server, no Cognito JWT verification, and no central error handler. Without this WI, the code cannot be deployed to Lambda or any other runtime.",
+          "inferred": true,
+          "reason": "Invalid source value: \"judgment-day\"."
+        },
+        "implementationStatus": "not-assessed",
+        "validationStatus": "not-assessed",
+        "releaseStatus": "not-assessed",
+        "scopeConfidence": {
+          "level": "high",
+          "reasons": [
+            "ADR-001 already commits the project to Cognito. The handler factories already accept a `preHook` that this WI plugs the verifier into. The contract is clear.",
+            "Only one open decision: which JWT-verification library to use (jose, jsonwebtoken, or AWS SDK verifier). Listed in decision candidates below.",
+            "No new endpoints, no new data model. Pure wiring + auth layer."
+          ]
+        },
+        "moduleCoverage": {
+          "agents": {
+            "status": "reviewed-not-affected"
+          },
+          "backend": {
+            "status": "affected"
+          },
+          "api": {
+            "status": "affected"
+          }
+        },
+        "impactAnalysis": {
+          "frontend": {
+            "status": "affected",
+            "reason": "Frontend will need to attach `Authorization: Bearer <token>` on every admin request — the existing frontend scaffold in apps/web/ must wire to the Cognito Hosted UI or a SDK helper. Out of scope here, but the contract is established."
+          },
+          "backend": {
+            "status": "affected",
+            "reason": "The 7 handler factories currently take a `preHook?: UserPreHook` parameter; this WI removes the optionality and makes the auth hook mandatory at the server bootstrap layer. Handlers are not modified except for removing the `'anonymous'` fallback."
+          },
+          "database": {
+            "status": "not-applicable"
+          },
+          "configuration": {
+            "status": "affected",
+            "reason": "New env vars: `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_REGION`. Optional `AUTH_DISABLED=true` for local dev only (must be false in production)."
+          },
+          "authentication": {
+            "status": "affected",
+            "reason": "This WI implements the missing Cognito verification that ADR-001 commits to."
+          },
+          "documentation": {
+            "status": "affected",
+            "reason": "Add a short README section in apps/functions/ documenting the auth contract and the env vars."
+          },
+          "operations": {
+            "status": "affected",
+            "reason": "Cognito User Pool must be provisioned (out of scope here) and the JWKS endpoint reachable from the Lambda runtime."
+          }
+        }
+      }
+    ],
     "archivedWorkItems": [],
     "allWorkItems": [
+      {
+        "id": "WI-003",
+        "type": "feature",
+        "title": "Server bootstrap with Cognito JWT verifier and route registration",
+        "status": "completed",
+        "lifecycle": "completed",
+        "knowledgeLevel": "K2",
+        "domains": [],
+        "source": {
+          "type": "unknown",
+          "id": "judgment-day-WI-002-round-1",
+          "title": "Server bootstrap with Cognito JWT verifier and route registration",
+          "context": "Derived from Judgment Day Round 1/2 findings on feature/WI-002-backend-endpoints: B-1 (CRITICAL — no production auth, every handler defaults to a shared 'anonymous' tenant) and A-9 (INFO — no server bootstrap wires the 7 factories). The current branch ships 7 isolated handler factories with no Fastify server, no Cognito JWT verification, and no central error handler. Without this WI, the code cannot be deployed to Lambda or any other runtime.",
+          "inferred": true,
+          "reason": "Invalid source value: \"judgment-day\"."
+        },
+        "implementationStatus": "not-assessed",
+        "validationStatus": "not-assessed",
+        "releaseStatus": "not-assessed",
+        "scopeConfidence": {
+          "level": "high",
+          "reasons": [
+            "ADR-001 already commits the project to Cognito. The handler factories already accept a `preHook` that this WI plugs the verifier into. The contract is clear.",
+            "Only one open decision: which JWT-verification library to use (jose, jsonwebtoken, or AWS SDK verifier). Listed in decision candidates below.",
+            "No new endpoints, no new data model. Pure wiring + auth layer."
+          ]
+        },
+        "moduleCoverage": {
+          "agents": {
+            "status": "reviewed-not-affected"
+          },
+          "backend": {
+            "status": "affected"
+          },
+          "api": {
+            "status": "affected"
+          }
+        },
+        "impactAnalysis": {
+          "frontend": {
+            "status": "affected",
+            "reason": "Frontend will need to attach `Authorization: Bearer <token>` on every admin request — the existing frontend scaffold in apps/web/ must wire to the Cognito Hosted UI or a SDK helper. Out of scope here, but the contract is established."
+          },
+          "backend": {
+            "status": "affected",
+            "reason": "The 7 handler factories currently take a `preHook?: UserPreHook` parameter; this WI removes the optionality and makes the auth hook mandatory at the server bootstrap layer. Handlers are not modified except for removing the `'anonymous'` fallback."
+          },
+          "database": {
+            "status": "not-applicable"
+          },
+          "configuration": {
+            "status": "affected",
+            "reason": "New env vars: `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_REGION`. Optional `AUTH_DISABLED=true` for local dev only (must be false in production)."
+          },
+          "authentication": {
+            "status": "affected",
+            "reason": "This WI implements the missing Cognito verification that ADR-001 commits to."
+          },
+          "documentation": {
+            "status": "affected",
+            "reason": "Add a short README section in apps/functions/ documenting the auth contract and the env vars."
+          },
+          "operations": {
+            "status": "affected",
+            "reason": "Cognito User Pool must be provisioned (out of scope here) and the JWKS endpoint reachable from the Lambda runtime."
+          }
+        }
+      },
       {
         "id": "WI-001",
         "type": "feature",
         "title": "Define public chatbot creation and publishing",
         "status": "ready",
         "lifecycle": "ready",
-        "status": "ready",
-        "lifecycle": "ready",
         "knowledgeLevel": "K2",
         "domains": [
           "Public Chatbot Delivery"
@@ -241,9 +406,56 @@
             "question": "What deployment, monitoring, and support model is required?"
           }
         }
+      },
+      {
+        "id": "WI-004",
+        "type": "feature",
+        "title": "CDK app bootstrap with Aurora Serverless v2 + pgvector + RDS Proxy",
+        "status": "ready",
+        "lifecycle": "ready",
+        "knowledgeLevel": "K2",
+        "domains": [],
+        "source": {
+          "type": "unknown",
+          "id": "post-wi-003-decisions-2026-08-28",
+          "title": "CDK app bootstrap with Aurora Serverless v2 + pgvector",
+          "context": "Derived from the post-WI-003 decision set (Q1 Aurora + pgvector committed in ADR-004, Q3 ordered as Infra/CDK → Bedrock+RAG → Frontend). The current monorepo has CDK 2.266.0 declared in the ADR-003 stack but no CDK app, no infra stack files, and no `infra/` skeleton beyond the placeholder package.json. Without this WI, the Bedrock + pgvector RAG layer (WI-005+) has nothing to deploy against and no place to run the HNSW-indexed embeddings table.",
+          "inferred": true,
+          "reason": "Invalid source value: \"post-wi-003-decisions\"."
+        }
       }
     ],
-    "artifacts": []
+    "artifacts": [
+      {
+        "id": "WI-003",
+        "type": "feature",
+        "title": "Server bootstrap with Cognito JWT verifier and route registration",
+        "summary": "",
+        "codeGlobs": [
+          "apps/functions/src/server.ts",
+          "apps/functions/src/auth/verifyCognitoJwt.ts",
+          "apps/functions/src/auth/claims.ts",
+          "apps/functions/src/auth/__tests__/verifyCognitoJwt.test.ts",
+          "apps/functions/src/api/__tests__/server.integration.test.ts"
+        ]
+      },
+      {
+        "id": "WI-004",
+        "type": "feature",
+        "title": "CDK app bootstrap with Aurora Serverless v2 + pgvector + RDS Proxy",
+        "summary": "",
+        "codeGlobs": [
+          "infra/app.ts",
+          "infra/lib/chat-saas-stack.ts",
+          "infra/lib/aurora-pgvector.ts",
+          "infra/lib/rds-proxy.ts",
+          "infra/lib/embeddings-table-resource.ts",
+          "infra/test/chat-saas-stack.test.ts",
+          "infra/cdk.json",
+          "infra/package.json"
+        ]
+      }
+    ]
   },
   "layers": [
     {
@@ -288,6 +500,9 @@
       "detected": [
         "WI-001-define-public-chatbot-creation-and-publishing.md",
         "WI-002-define-backend-endpoints.md",
+        "WI-002b-fix-typescript-types-wi-002.md",
+        "WI-003-server-bootstrap-with-cognito-jwt-verifier.md",
+        "WI-004-cdk-app-bootstrap-with-aurora-pgvector.md",
         "roadmap.md"
       ]
     }
@@ -324,20 +539,19 @@
     "present": true,
     "initiatives": 1,
     "work_item_candidates": 1,
-    "materialized_work_items": 1,
+    "materialized_work_items": 3,
     "remaining_work_item_candidates": 0,
     "candidates": 1,
-    "materialized": 1,
+    "materialized": 3,
     "remaining": 0
   },
   "phase": {
     "phase": "Active Delivery",
     "reasons": [
       "Roadmap available",
-      "1 materialized work item(s)",
-      "ready: 1",
-      "ready: 1",
-      "Ownership coverage 0%"
+      "3 materialized work item(s)",
+      "ready: 2",
+      "Ownership coverage 67%"
     ],
     "recommendedAgents": [
       "implementation-agent",
@@ -363,28 +577,24 @@
     "draft_work_items": 0,
     "refined_draft_work_items": 0,
     "refined_draft_ids": [],
-    "ready_work_items": 1,
+    "ready_work_items": 2,
     "ready_work_item_ids": [
-    "draft_work_items": 0,
-    "refined_draft_work_items": 0,
-    "refined_draft_ids": [],
-    "ready_work_items": 1,
-    "ready_work_item_ids": [
-      "WI-001"
+      "WI-001",
+      "WI-004"
     ],
     "ready_multirepo_wi_ids": [],
     "in_progress_work_items": 0,
     "blocked_work_items": 0,
-    "total_work_items": 1,
-    "ownership_coverage": "0/1",
+    "total_work_items": 3,
+    "ownership_coverage": "2/3",
     "remaining_work_item_candidates": 0,
-    "decision_candidates": 7,
+    "decision_candidates": 8,
     "accepted_adrs": 7,
     "adapters_installed": 1
   },
   "techDecisions": {
     "status": "accepted-adrs",
-    "candidates": 7,
+    "candidates": 8,
     "adrs": 7,
     "draft_adrs": 0,
     "accepted_adrs": 7,
@@ -405,24 +615,29 @@
         "suggestedAdrFile": "knowledge/tech/decisions/ADR-010-data-partitioning-strategy-for-tenant-isolation.md"
       },
       {
+        "title": "Document Parsing Strategy",
+        "source": "knowledge/tech/discovery/decision-candidates.md",
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-011-document-parsing-strategy.md"
+      },
+      {
         "title": "Application Architecture Style",
         "source": "knowledge/tech/discovery/decision-candidates.md",
-        "suggestedAdrFile": "knowledge/tech/decisions/ADR-011-application-architecture-style.md"
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-012-application-architecture-style.md"
       },
       {
         "title": "Usage Limits and Enforcement",
         "source": "knowledge/tech/discovery/decision-candidates.md",
-        "suggestedAdrFile": "knowledge/tech/decisions/ADR-012-usage-limits-and-enforcement.md"
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-013-usage-limits-and-enforcement.md"
       },
       {
         "title": "Credit System Implementation",
         "source": "knowledge/tech/discovery/decision-candidates.md",
-        "suggestedAdrFile": "knowledge/tech/decisions/ADR-013-credit-system-implementation.md"
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-014-credit-system-implementation.md"
       },
       {
         "title": "Observability and Monitoring Approach",
         "source": "knowledge/tech/discovery/decision-candidates.md",
-        "suggestedAdrFile": "knowledge/tech/decisions/ADR-014-observability-and-monitoring-approach.md"
+        "suggestedAdrFile": "knowledge/tech/decisions/ADR-015-observability-and-monitoring-approach.md"
       }
     ],
     "candidates_source": "knowledge/tech/discovery/decision-candidates.md",
@@ -488,21 +703,18 @@
     }
   },
   "workItemSummary": {
-    "total": 1,
-    "active": 1,
+    "total": 3,
+    "active": 2,
     "draft": 0,
-    "ready": 1,
-    "draft": 0,
-    "ready": 1,
+    "ready": 2,
     "in_progress": 0,
     "blocked": 0,
-    "completed": 0,
+    "completed": 1,
     "archived": 0,
-    "summary": "ready"
     "summary": "ready"
   },
   "deliveryMix": {
-    "feature": 1
+    "feature": 2
   },
   "external": [],
   "graph": null,
@@ -543,10 +755,10 @@
   },
   "projectRoute": {
     "type": "new",
-    "currentStep": "prepare-implementation",
-    "completed": 8,
+    "currentStep": "create-work-source",
+    "completed": 9,
     "total": 12,
-    "progressPercent": 67,
+    "progressPercent": 75,
     "steps": [
       {
         "id": "enable-kaddo",
@@ -592,10 +804,11 @@
       {
         "id": "create-work-source",
         "label": "Create initial work source",
-        "status": "done",
+        "status": "warning",
         "evidence": [
-          "knowledge/delivery/roadmap.md"
-        ]
+          "Work Items with unknown source"
+        ],
+        "reason": "Some Work Items have no source metadata."
       },
       {
         "id": "materialize-work-item",
@@ -609,33 +822,28 @@
         "id": "refine-work-item",
         "label": "Refine Work Item",
         "status": "done"
-        "status": "done"
       },
       {
         "id": "suggest-ownership",
         "label": "Suggest ownership",
         "status": "next",
-        "reason": "Ownership coverage is 0/1.",
+        "reason": "Ownership coverage is 2/3.",
         "command": "kaddo owners suggest"
       },
       {
         "id": "prepare-implementation",
         "label": "Prepare implementation",
-        "status": "current",
-        "agent": "implementation-agent"
-        "status": "current",
-        "agent": "implementation-agent"
+        "status": "done"
       },
       {
         "id": "run-guard",
         "label": "Run guard",
-        "status": "next"
-        "status": "next"
+        "status": "pending"
       },
       {
         "id": "capture-learning",
         "label": "Capture learning",
-        "status": "pending"
+        "status": "done"
       }
     ]
   },

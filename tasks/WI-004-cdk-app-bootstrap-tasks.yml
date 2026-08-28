@@ -1,0 +1,113 @@
+# WI-004 CDK App Bootstrap Tasks
+
+## Change
+- **Name**: WI-004-cdk-app-bootstrap-with-aurora-pgvector
+- **Based on**: ADR-004 (2026-08-28 revision) + post-WI-003 decisions
+- **Artifact store**: Kaddo
+- **Branch**: feature/post-wi-003-rag-infra
+- **Tests**: vitest + aws-cdk-lib/assertions
+
+## Tasks (implementation order)
+
+### 1. Bootstrap the `infra/` workspace
+- [ ] Add `infra` to `pnpm-workspace.yaml` (already present, verify).
+- [ ] Create `infra/package.json` with `aws-cdk-lib@2.266.0`, `constructs@^10`, `@aws-sdk/client-rds-data@^3.1116.0`, `vitest@^4.1.11`, `ts-node` as dev deps.
+- [ ] Create `infra/tsconfig.json` extending the root, `target: ES2022`, `module: ESNext`, `moduleResolution: bundler`, `strict: true`.
+- [ ] Create `infra/cdk.json` with `app: "npx ts-node --prefer-ts-exts app.ts"` and feature flags as needed.
+- [ ] Add `infra/.gitignore` for `cdk.out/`, `node_modules/`, `*.d.ts`, `*.js` (except `*.config.js`).
+- [ ] Add an `infra/README.md` with prerequisites (Node 24, pnpm 11, CDK CLI, AWS account, Bedrock-enabled region) and the deploy command.
+- **Dependencies**: none (greenfield).
+
+### 2. Build the stack composition
+- [ ] Create `infra/app.ts` that loads the dev account/region from context and instantiates `ChatSaaSStack`.
+- [ ] Create `infra/lib/chat-saas-stack.ts` that composes Aurora, RDS Proxy, Secrets, and the custom resource.
+- [ ] Create `infra/lib/vpc.ts` (or inline in the stack) for the minimal VPC (2 private subnets across 2 AZs, no NAT, no IGW). For MVP, accept the default VPC and reference its private subnets.
+- **Dependencies**: Task 1.
+
+### 3. Aurora Serverless v2 cluster with `pgvector`
+- [ ] Create `infra/lib/aurora-pgvector.ts` exposing a construct that returns the cluster, the database, and the secret.
+- [ ] Engine: `aurora-postgresql`, version `16.4` (verify the latest 16.x at the time of merge).
+- [ ] Serverless v2: 0.5 ACU min, 4 ACU max, `autoPause` left at the CDK default (off) for MVP.
+- [ ] Parameter group: `shared_preload_libraries = 'vector'`.
+- [ ] Database: name `chatsaas`, single writer.
+- [ ] Credentials: `rds.Credentials.fromGeneratedSecret('chatsaas-db')` with exclusion of uppercase/lowercase requirements.
+- [ ] Enable `pgvector` via a custom resource (Task 5).
+- **Dependencies**: Task 2.
+
+### 4. Secrets Manager + 7-day rotation
+- [ ] The generated secret from Task 3 is used; add explicit `RotationRules: { automaticallyAfter: Duration.days(7) }` to the secret.
+- [ ] Create a placeholder rotation Lambda in `infra/lib/rotation-lambda.ts` with the correct handler signature (`SecretsManagerRotationHandler`) and a no-op `rotate` function. A follow-up WI implements the actual rotation logic.
+- [ ] Wire the rotation Lambda to the secret via `addRotationLambda`.
+- **Dependencies**: Task 3.
+
+### 5. Custom resource: `public.embeddings` table + HNSW index
+- [ ] Create `infra/lib/embeddings-table-resource.ts` exposing an `EmbeddingsTableResource` construct.
+- [ ] Uses `cr.AwsCustomResource` (or a CDK custom resource Lambda) that runs the SQL on cluster creation.
+- [ ] SQL: `CREATE EXTENSION IF NOT EXISTS vector; CREATE TABLE IF NOT EXISTS public.embeddings (id UUID PRIMARY KEY DEFAULT gen_random_uuid(), chatbot_id UUID NOT NULL, company_id UUID NOT NULL, content TEXT NOT NULL, embedding vector(1024) NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT now()); CREATE INDEX IF NOT EXISTS embeddings_chatbot_company_idx ON public.embeddings (chatbot_id, company_id); CREATE INDEX IF NOT EXISTS embeddings_embedding_hnsw_idx ON public.embeddings USING hnsw (embedding vector_cosine_ops);`
+- [ ] The resource is idempotent: every `CREATE` uses `IF NOT EXISTS`.
+- [ ] The resource runs after the cluster is `AVAILABLE` via `isComplete` polling on `describe-db-clusters`.
+- **Dependencies**: Task 3, Task 4.
+
+### 6. RDS Proxy
+- [ ] Create `infra/lib/rds-proxy.ts` exposing a construct that takes the cluster and secret and returns a `rds.DatabaseProxy`.
+- [ ] IAM auth on.
+- [ ] Target group: the cluster writer, max connections per client 100, max idle connections 10.
+- [ ] vpcSecurityGroups: one SG with inbound 5432 from the Lambda SG (Task 7).
+- [ ] Secrets: the cluster credential from Task 3.
+- **Dependencies**: Task 3, Task 4.
+
+### 7. Security groups
+- [ ] `LambdaSG`: outbound 5432 to the ProxySG.
+- [ ] `ProxySG`: outbound all (default).
+- [ ] `ClusterSG`: inbound 5432 from the ProxySG only.
+- [ ] Wire the SGs into the cluster, proxy, and (placeholder) the Lambda functions (the Lambda wiring is a follow-up WI).
+- **Dependencies**: Task 6.
+
+### 8. Stack outputs
+- [ ] Cluster endpoint.
+- [ ] Cluster reader endpoint (if multi-AZ; for v2 single-AZ this is the same as the writer).
+- [ ] Proxy endpoint.
+- [ ] Secret ARN.
+- [ ] Database name.
+- [ ] Embeddings table name (`public.embeddings`).
+- **Dependencies**: Task 5, Task 6.
+
+### 9. Vitest suite with CDK assertions
+- [ ] Create `infra/test/chat-saas-stack.test.ts`.
+- [ ] Synthesize the stack into a `Template` and assert:
+  - One `AWS::RDS::DBCluster` with engine `aurora-postgresql` and version `16.x`.
+  - One `AWS::RDS::DBClusterParameterGroup` with `shared_preload_libraries` containing `vector`.
+  - The custom resource Lambda's inline code contains `CREATE EXTENSION`, `CREATE TABLE IF NOT EXISTS public.embeddings`, and `USING hnsw`.
+  - The custom resource SQL includes `chatbot_id` and `company_id` columns.
+  - One `AWS::RDS::DBProxy` with `Auth` containing `IAMAuth: REQUIRED`.
+  - One `AWS::SecretsManager::Secret` with `RotationRules.AutomaticallyAfterDays: 7`.
+- **Dependencies**: Tasks 3–8.
+
+### 10. Validation and commit
+- [ ] `pnpm install` resolves the new workspace.
+- [ ] `pnpm -F infra synth` produces a clean template.
+- [ ] `pnpm -F infra test` is green.
+- [ ] `pnpm type-check` at the root is 0 errors.
+- [ ] `pnpm lint` at the root is 0 errors on `infra/`.
+- [ ] `kaddo guard` is 0/0.
+- [ ] `kaddo questions` shows no new blocking questions.
+- [ ] Commit on `feature/post-wi-003-rag-infra` with message `feat(WI-004): bootstrap CDK app with Aurora Serverless v2 + pgvector + RDS Proxy`.
+- **Dependencies**: All previous tasks.
+
+## Dependencies
+
+- `aws-cdk-lib@2.266.0`
+- `constructs@^10`
+- `@aws-sdk/client-rds-data@^3.1116.0` (for the custom resource invocation path; not strictly required if we use `pg` driver inside a Lambda — defer the choice to the implementation)
+- `vitest@^4.1.11`
+- `ts-node@^10` (for CDK app execution)
+
+## Out of Scope
+
+- Cognito User Pool provisioning.
+- Bedrock Knowledge Base wiring (WI-005).
+- Ingest pipeline / parsers (WI-005).
+- API Gateway HTTP API wiring at the stack level.
+- Production stack, multi-region, cross-account.
+- Local dev without a real Aurora cluster.
+- Rotation Lambda implementation (rotation is wired, hook is a stub).

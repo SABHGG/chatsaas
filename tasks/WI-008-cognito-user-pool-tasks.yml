@@ -1,0 +1,111 @@
+# WI-008 Cognito User Pool Tasks
+
+## Change
+- **Name**: WI-008-cognito-user-pool
+- **Based on**: ADR-001 (Cognito auth) + ADR-006 (data partitioning / tenant isolation) + WI-003 (JWT verifier)
+- **Artifact store**: Kaddo
+- **Branch**: feature/post-wi-003-rag-infra
+- **Tests**: vitest + aws-cdk-lib/assertions
+- **Critical dependency**: WI-005 depends on AC-13 + AC-14 (chain of custody) from this WI. Land these ACs before WI-005 implementation begins.
+
+## Decisions resolved (2026-08-28)
+- DC-008-1: `companies` table lives in the CDK construct (`infra/lib/lambda/companies-table.ts`).
+- DC-008-2: hybrid admin allowlist (A for dev, B for prod via SSM).
+- DC-008-3: MFA optional for `customer`, required for `admin` (TOTP enforced in pre-token throw).
+- DC-008-4: hosted UI for MVP.
+- DC-008-5: same region as Aurora (us-east-1 default).
+- DC-005-1 (cross-WI): chain of custody for `custom:company_id` closed by AC-13 + AC-14.
+
+## Tasks (implementation order)
+
+### 1. Extend the schema registry
+- [ ] Add `Company` type to `apps/functions/src/db/schema.ts`.
+- [ ] Add `TABLES.COMPANIES` constant.
+- [ ] The CDK construct reads the table name from a stack output; `apps/functions` imports the same output value at boot.
+- **Dependencies**: none.
+
+### 2. CDK: companies DynamoDB table
+- [ ] `infra/lib/lambda/companies-table.ts`.
+- [ ] Table name: `chatsaas-{envName}-companies`.
+- [ ] `PAY_PER_REQUEST`.
+- [ ] `PointInTimeRecoverySpecification` enabled when `envName === 'prod'`.
+- **Dependencies**: Task 1.
+
+### 3. CDK: Cognito User Pool
+- [ ] `infra/lib/cognito-user-pool.ts`.
+- [ ] `PasswordPolicy: MinimumLength 12, RequireLowercase/Uppercase/Numbers/Symbols all true, TemporaryPasswordValidityDays 3`.
+- [ ] `customAttributes: { company_id: { type: 'String', mutable: false, StringAttributeConstraints: { MinLength: '1' } } }`.
+- [ ] **AC-13**: `writeAttributes` whitelist on the User Pool Client OMITS `custom:company_id` (SignUp cannot accept the claim from the client).
+- [ ] **AC-14**: Only the post-confirmation Lambda's execution role has `cognito-idp:AdminUpdateUserAttributes`. CDK assertion iterates every role in the synthesized template and fails on any other principal with the action.
+- [ ] `AdvancedSecurityMode: audit` (dev) / `enforced` (prod).
+- [ ] `DeletionProtection: RETAIN` for prod.
+- [ ] `SelfSignUp: enabled`, `SignInAliases: { email: true }`.
+- [ ] `Mfa: optional` (TOTP); required-for-admin enforced by the pre-token-generation Lambda, not by the pool.
+- [ ] Stack outputs: `UserPoolId`, `UserPoolClientId`, `UserPoolDomain`, `IssuerUrl`.
+- **Dependencies**: Task 2.
+
+### 4. CDK: User Pool Client
+- [ ] `GenerateSecret: false`.
+- [ ] `AllowedOAuthFlows: ['code']`, `AllowedOAuthFlowsUserPoolClient: true`.
+- [ ] `AllowedOAuthScopes: ['openid', 'email', 'profile', 'aws.cognito.signin.user.admin']`.
+- [ ] `CallbackURLs` matches envName-specific list.
+- [ ] `ExplicitAuthFlows` does NOT include `ALLOW_USER_PASSWORD_AUTH` or `ALLOW_CUSTOM_AUTH`.
+- [ ] `IDTokenValidity: 1h`, `RefreshTokenValidity: 30d`.
+- [ ] **AC-13 vitest**: asserts read/write attribute sets.
+- **Dependencies**: Task 3.
+
+### 5. CDK: User Pool Domain
+- [ ] `DomainPrefix` from construct prop.
+- [ ] No custom domain config.
+- [ ] Emits `https://{prefix}.auth.{region}.amazoncognito.com` as a stack output.
+- **Dependencies**: Task 3.
+
+### 6. CDK: User Pool Groups
+- [ ] Two groups: `customer` (precedence 0, default) and `admin` (precedence 10).
+- [ ] Admin allowlist: dev = hardcoded CDK context; prod = SSM parameter `/chatsaas/{envName}/admin-allowlist`.
+- **Dependencies**: Task 3.
+
+### 7. CDK: post-confirmation Lambda
+- [ ] Runtime: `nodejs20.x`, handler: `index.handler`.
+- [ ] Env vars: `COMPANIES_TABLE_NAME`, `COGNITO_USER_POOL_ID`.
+- [ ] IAM: `dynamodb:PutItem` on the companies table, `cognito-idp:AdminUpdateUserAttributes` on the pool.
+- [ ] Handler generates UUID v4, `PutItem` with `attribute_not_exists(id)` (idempotent), `AdminUpdateUserAttributes` to set `custom:company_id`.
+- [ ] Unit test asserts the UUID is v4 and the PutItem shape is correct.
+- **Dependencies**: Tasks 2, 3.
+
+### 8. CDK: pre-token-generation Lambda
+- [ ] Runtime: `nodejs20.x`, handler: `index.handler`.
+- [ ] NO IAM permissions (no AWS API calls).
+- [ ] Pure function: copies `custom:company_id` and `cognito:groups` from `event.request.userAttributes` into `event.response.claimsOverride.details`.
+- [ ] If `admin` group AND no TOTP MFA setting → throw (Cognito returns no token).
+- [ ] Unit test asserts IAM statement count is 0 and the handler is pure (same input → same output).
+- [ ] Unit test asserts the throw for admin without TOTP.
+- **Dependencies**: Task 3.
+
+### 9. CDK: stack composition
+- [ ] `infra/lib/chat-saas-stack.ts` adds the new constructs.
+- [ ] Wires the two Lambda triggers to the User Pool.
+- **Dependencies**: Tasks 2..8.
+
+### 10. CDK tests
+- [ ] 12+ assertions on the synthesized template (User Pool, Client, Domain, Groups, companies table, stack outputs, password policy, immutable attribute, OAuth flow, callback URLs, group precedence, deletion protection, advanced security).
+- [ ] 5+ Lambda handler unit tests (post-confirmation UUID + PutItem, pre-token pure, pre-token throw).
+- [ ] **AC-14 assertion**: iterate every IAM principal in the template, fail on any role other than the post-confirmation Lambda's with `AdminUpdateUserAttributes`.
+- **Dependencies**: Task 9.
+
+### 11. `auth/claims.ts` SECURITY NOTE update
+- [ ] Update the SECURITY NOTE in `apps/functions/src/auth/claims.ts` to describe the chain of custody: SignUp rejection + IAM scoping + post-confirmation sole writer + pre-token pure.
+- [ ] This is the documentation change that unblocks `resolveTenant` in WI-005.
+- **Dependencies**: Tasks 7, 8, 10.
+
+## Risks
+- Post-confirmation race: pre-token reads from user attributes, not DynamoDB, so it is not on the critical path.
+- Custom attribute immutability mistake: hardcoded `mutable: false` + AC-13 + AC-14.
+- Admin allowlist drift: SSM path for prod, hardcoded for dev.
+
+## Validation
+- `pnpm -F infra synth` produces the 4 expected resources + 4 outputs + the companies table.
+- `pnpm -F infra test` green.
+- `kaddo guard` 0 findings.
+- `kaddo questions` 0 new blocking.
+- Manual smoke (documented): `cdk deploy` to a dev account, sign up, verify the Company record lands in DynamoDB, verify the JWT contains the immutable `custom:company_id`, verify the post-confirmation Lambda is the only principal with `AdminUpdateUserAttributes` (IAM Access Analyzer check).
