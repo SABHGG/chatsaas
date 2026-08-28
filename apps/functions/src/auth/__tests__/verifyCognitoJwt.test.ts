@@ -392,6 +392,31 @@ describe('WI-003: verifyCognitoJwt', () => {
     await app.close()
   })
 
+  it('rejects a token with a whitespace-only sub claim with 401', async () => {
+    // The verifier trims `sub` so a token whose subject is just spaces
+    // is treated the same as an absent one. Without this, a forged
+    // token with sub="   " would propagate a whitespace-only identifier
+    // into DynamoDB partition keys.
+    const wsSub = await new SignJWT({ token_use: 'access' })
+      .setProtectedHeader({ alg: 'RS256', kid: KEY_ID })
+      .setIssuer(ISSUER)
+      .setAudience(CLIENT_ID)
+      .setIssuedAt()
+      .setExpirationTime('5m')
+      .setSubject('   ')
+      .sign(privateKey)
+
+    const app = await makeApp(buildHook())
+    const res = await app.inject({
+      method: 'GET',
+      url: '/whoami',
+      headers: { authorization: `Bearer ${wsSub}` },
+    })
+    expect(res.statusCode).toBe(401)
+    expect(res.json().code).toBe('UNAUTHENTICATED')
+    await app.close()
+  })
+
   it('leaves companyId undefined when the token has no custom:company_id', async () => {
     // The verifier should never fabricate a companyId. If the claim is
     // missing, `request.user.companyId` stays undefined (and any

@@ -296,4 +296,65 @@ describe('WI-003: server bootstrap', () => {
     expect(res.json().code).toBe('UNAUTHENTICATED')
     await fastify.close()
   })
+
+  it('rejects startup when ALLOWED_ORIGINS mixes a wildcard with concrete origins', async () => {
+    // WI-003 round 2 fix: silent credentials-off on mixed allowlists.
+    await expect(
+      createServer({
+        cognito: buildTestHook(),
+        allowedOrigins: 'https://app.example.com,*',
+        loggerDisabled: true,
+      })
+    ).rejects.toThrow(/mixing '\*' with concrete origins/)
+  })
+
+  it('treats an empty allowedOrigins as the wildcard default', async () => {
+    // WI-003 round 2 fix: empty allowlist was producing `[]` and
+    // locking every origin out with no log line.
+    const fastify = await createServer({
+      cognito: buildTestHook(),
+      allowedOrigins: '',
+      loggerDisabled: true,
+    })
+    const res = await fastify.inject({
+      method: 'OPTIONS',
+      url: '/api/credits/balance',
+      headers: {
+        origin: 'https://anything.example.com',
+        'access-control-request-method': 'GET',
+      },
+    })
+    expect(res.statusCode).toBe(204)
+    // Empty falls through to wildcard, so the request origin is
+    // reflected (the @fastify/cors behavior under cb(null, true) +
+    // credentials: false).
+    expect(res.headers['access-control-allow-origin']).toBe(
+      'https://anything.example.com'
+    )
+    expect(res.headers['access-control-allow-credentials']).toBeUndefined()
+    await fastify.close()
+  })
+
+  it('rejects a preflight from a non-allowlisted origin with no CORS header', async () => {
+    // Pin the cb(null, false) path: an `OPTIONS` from a foreign origin
+    // must not carry any Access-Control-Allow-Origin header. A future
+    // refactor that changes this back to cb(new Error(...)) would
+    // route into the central error handler and return a 500 — silently
+    // wrong.
+    const fastify = await createServer({
+      cognito: buildTestHook(),
+      allowedOrigins: 'https://app.example.com',
+      loggerDisabled: true,
+    })
+    const res = await fastify.inject({
+      method: 'OPTIONS',
+      url: '/api/credits/balance',
+      headers: {
+        origin: 'https://evil.example.com',
+        'access-control-request-method': 'GET',
+      },
+    })
+    expect(res.headers['access-control-allow-origin']).toBeUndefined()
+    await fastify.close()
+  })
 })

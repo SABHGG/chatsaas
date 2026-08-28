@@ -92,8 +92,13 @@ export function verifyCognitoJwt(config: CognitoVerifierConfig): UserPreHook {
     }
 
     if (claims.token_use !== 'access') {
-      // Log distinguishes id vs access for ops; response does not.
-      request.log.warn('cognito jwt rejected: not an access token')
+      // Log distinguishes id vs access for ops so CloudWatch queries
+      // can find customers that misconfigured an id-token flow; the
+      // response body is byte-identical to the other 401s (no leak).
+      request.log.warn(
+        { tokenUse: claims.token_use },
+        'cognito jwt rejected: not an access token'
+      )
       return unauthorized()
     }
 
