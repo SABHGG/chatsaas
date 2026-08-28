@@ -1,13 +1,15 @@
 # Dependencies
 node_modules/
 
-# Production
+# Build outputs
 .next/
 /out/
-
-# Dependencies build
-/turbo
+dist/
+build/
+.turbo/
+/.turbo
 /.pnpm
+.pnpm-store/
 
 # Environment variables
 .env
@@ -16,24 +18,41 @@ node_modules/
 # Logs
 logs/
 *.log
+pnpm-debug.log*
+lerna-debug.log*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
-# Typescript
+# TypeScript
 *.tsbuildinfo
+
+# Backups and temp files
+*.bak
+*.tmp
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
 
 # IDE
 .vscode/
 .idea/
 
-# Swagger
-swagger-docs.json
+# OpenCode / AI tooling
+.opencode/
 
-# Next.js auto-generated
-/next-env.d.ts
-
-# Vitest/coverage outputs
+# Vitest / coverage outputs
 coverage/
 .nyc_output/
 
 # Test scratch files
 test-output.txt
 tsc-output.txt
+
+# Swagger / generated artifacts
+swagger-docs.json
+
+# Next.js auto-generated (in any subdirectory)
+next-env.d.ts
