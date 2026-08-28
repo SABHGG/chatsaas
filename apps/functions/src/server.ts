@@ -61,7 +61,18 @@ async function resolveDeps(opts: CreateServerOptions): Promise<CreateServerDeps>
     )
   }
 
-  const originsCsv = opts.allowedOrigins ?? process.env.ALLOWED_ORIGINS ?? '*'
+  // Resolve and validate the CORS allowlist. Two non-obvious edge cases
+  // the operator must not get bitten by:
+  //  1. `ALLOWED_ORIGINS=""` (set-but-empty) is treated the same as
+  //     unset: a wildcard. Otherwise an empty list would silently
+  //     lock the dashboard out with no log line.
+  //  2. Mixed allowlist (`https://app.example.com,*`) is rejected at
+  //     boot. Either you want a tight allowlist (with credentials) or
+  //     an open wildcard (no credentials) — silently flipping
+  //     credentials off because someone appended `*` to a concrete
+  //     list has burned people before.
+  const rawCsv = opts.allowedOrigins ?? process.env.ALLOWED_ORIGINS
+  const originsCsv = (rawCsv ?? '').trim() || '*'
   const allowedOrigins =
     originsCsv === '*'
       ? ['*']
@@ -69,6 +80,17 @@ async function resolveDeps(opts: CreateServerOptions): Promise<CreateServerDeps>
           .split(',')
           .map((s) => s.trim())
           .filter(Boolean)
+
+  if (
+    originsCsv !== '*' &&
+    allowedOrigins.length > 1 &&
+    allowedOrigins.includes('*')
+  ) {
+    throw new Error(
+      `Invalid ALLOWED_ORIGINS: mixing '*' with concrete origins is not allowed. ` +
+        `Use either a single '*' (no credentials) or a comma-separated list of origins.`
+    )
+  }
 
   return { userPreHook, allowedOrigins }
 }

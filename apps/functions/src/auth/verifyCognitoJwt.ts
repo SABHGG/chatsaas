@@ -51,22 +51,29 @@ export function verifyCognitoJwt(config: CognitoVerifierConfig): UserPreHook {
     request: FastifyRequest,
     reply: FastifyReply
   ) {
-    const header = request.headers.authorization
-    if (!header || !header.startsWith(BEARER_PREFIX)) {
-      return reply.code(401).send({
+    // All 401 responses share a single error body — a hostile client
+    // must not be able to tell from the response why their token was
+    // rejected (missing header vs. empty bearer vs. invalid signature
+    // vs. wrong audience vs. expired vs. id-token vs. missing sub).
+    // The diagnostic details stay in the structured log line, never in
+    // the response.
+    const unauthorized = () =>
+      reply.code(401).send({
         success: false,
-        error: 'Missing or malformed Authorization header',
+        error: 'Invalid or expired token',
         code: 'UNAUTHENTICATED',
       })
+
+    const header = request.headers.authorization
+    if (!header || !header.startsWith(BEARER_PREFIX)) {
+      request.log.warn('cognito jwt rejected: missing or malformed Authorization header')
+      return unauthorized()
     }
 
     const token = header.slice(BEARER_PREFIX.length).trim()
     if (!token) {
-      return reply.code(401).send({
-        success: false,
-        error: 'Empty bearer token',
-        code: 'UNAUTHENTICATED',
-      })
+      request.log.warn('cognito jwt rejected: empty bearer token')
+      return unauthorized()
     }
 
     let claims: CognitoAccessTokenClaims
@@ -81,38 +88,27 @@ export function verifyCognitoJwt(config: CognitoVerifierConfig): UserPreHook {
         { err: sanitizeError(err) },
         'cognito jwt verification failed'
       )
-      return reply.code(401).send({
-        success: false,
-        error: 'Invalid or expired token',
-        code: 'UNAUTHENTICATED',
-      })
+      return unauthorized()
     }
 
     if (claims.token_use !== 'access') {
-      // Same envelope as the other 401s to avoid leaking the policy
-      // distinction between id tokens and access tokens.
-      request.log.warn(
-        { tokenUse: claims.token_use },
-        'cognito jwt rejected: not an access token'
-      )
-      return reply.code(401).send({
-        success: false,
-        error: 'Invalid or expired token',
-        code: 'UNAUTHENTICATED',
-      })
+      // Log distinguishes id vs access for ops; response does not.
+      request.log.warn('cognito jwt rejected: not an access token')
+      return unauthorized()
     }
 
-    if (typeof claims.sub !== 'string' || claims.sub.length === 0) {
-      // Cognito access tokens always carry `sub`; an absent one means a
-      // misconfigured client or a forged token that bypassed the issuer
-      // check. Fail closed here so downstream handlers never see an
-      // empty `request.user.sub`.
+    if (
+      typeof claims.sub !== 'string' ||
+      claims.sub.length === 0 ||
+      claims.sub.trim().length === 0
+    ) {
+      // Cognito access tokens always carry a non-empty `sub`; an absent
+      // one (or whitespace-only) means a misconfigured client or a
+      // forged token that bypassed the issuer check. Fail closed here
+      // so downstream handlers never see an empty
+      // `request.user.sub`.
       request.log.warn('cognito jwt rejected: missing or empty sub claim')
-      return reply.code(401).send({
-        success: false,
-        error: 'Invalid or expired token',
-        code: 'UNAUTHENTICATED',
-      })
+      return unauthorized()
     }
 
     const user: AuthenticatedUser = {

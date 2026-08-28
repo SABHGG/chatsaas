@@ -231,6 +231,24 @@ describe('WI-002: Backend Endpoints Fastify', () => {
       expect(data.data.length).toBe(2)
       await fastify.close()
     })
+
+    it('returns 401 with UNAUTHENTICATED when the user preHook has no sub', async () => {
+      // Defense-in-depth regression test for WI-003 round 2 finding:
+      // plansAvailable was the only admin plugin missing the explicit
+      // 401 guard. If a future refactor drops the `userId` check, this
+      // test must catch it.
+      const fastify = await plansAvailable.plansAvailableFactory(
+        fakeUserHook('')
+      )
+      const response = await fastify.inject({
+        method: 'GET',
+        url: '/',
+      })
+      expect(response.statusCode).toBe(401)
+      const body = JSON.parse(response.payload)
+      expect(body.code).toBe('UNAUTHENTICATED')
+      await fastify.close()
+    })
   })
 
   describe('plansSubscribe', () => {
