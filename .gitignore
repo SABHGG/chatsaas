@@ -56,3 +56,5 @@ swagger-docs.json
 
 # Next.js auto-generated (in any subdirectory)
 next-env.d.ts
+# Local Pi runtime state
+.atl/
