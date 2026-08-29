@@ -3,12 +3,25 @@
   "scalar": "2.0.0",
   "info": {
     "title": "chatSaaS",
-    "description": "Public document-grounded chatbot platform — backend API references and project documentation."
+    "description": "Public document-grounded chatbot platform \u2014 backend API references and project documentation."
   },
   "navigation": {
     "tabs": [
-      { "title": "WI-002 Backend API", "to": "/api/backend", "icon": "phosphor/regular/plug" },
-      { "title": "WI-006 Public Chat API", "to": "/api/public-chat", "icon": "phosphor/regular/chat-circle-dots" }
+      {
+        "title": "WI-002 Backend API",
+        "to": "/api/backend",
+        "icon": "phosphor/regular/plug"
+      },
+      {
+        "title": "WI-006 Public Chat API",
+        "to": "/api/public-chat",
+        "icon": "phosphor/regular/chat-circle-dots"
+      },
+      {
+        "title": "Full Backend API",
+        "to": "/api/full",
+        "icon": "phosphor/regular/list"
+      }
     ],
     "routes": {
       "/": {
@@ -26,6 +39,11 @@
         "type": "openapi",
         "title": "WI-006 Retrieval + Chat Handler API",
         "filepath": "openspec/WI-006-retrieval-chat-openapi.yaml"
+      },
+      "/api/full": {
+        "type": "openapi",
+        "title": "chatSaaS Backend API (implemented surface)",
+        "filepath": "openspec/chatsaas-openapi.yaml"
       }
     }
   }

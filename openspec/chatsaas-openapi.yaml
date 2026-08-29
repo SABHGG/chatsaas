@@ -1,0 +1,484 @@
+openapi: 3.1.0
+info:
+  title: chatSaaS Backend API (implemented surface)
+  description: >
+    Consolidated API reference for every endpoint currently implemented in
+    `apps/functions/src`. Endpoints planned under WI-001 (chatbot CRUD, publish,
+    widget config/iframe) are intentionally absent here. Public chat message
+    sending is documented in detail in WI-006-retrieval-chat-openapi.yaml.
+  version: "1.0.0"
+  contact:
+    name: chatsaas Team
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+security:
+  - cognitoJwt: []
+paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: healthz
+      tags: [Health]
+      security: []
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ok }
+                required: [status]
+  /api/credits/balance:
+    get:
+      summary: Get the authenticated user's credit balance
+      operationId: getCreditsBalance
+      tags: [Credits]
+      responses:
+        "200":
+          description: Current balance
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BalanceResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/credits/debit:
+    post:
+      summary: Debit credits for an action (atomic conditional decrement)
+      operationId: debitCredits
+      tags: [Credits]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: integer, minimum: 1 }
+                reason: { type: string, nullable: true }
+              required: [amount]
+              additionalProperties: false
+      responses:
+        "200":
+          description: Debit applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewBalanceResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "402":
+          description: Insufficient credits (atomic ConditionExpression failure)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/credits/replenish:
+    post:
+      summary: Add credits to the user's balance
+      operationId: replenishCredits
+      tags: [Credits]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                amount: { type: integer, minimum: 1 }
+              required: [amount]
+              additionalProperties: false
+      responses:
+        "200":
+          description: Replenish applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NewBalanceResponse"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/plans/available:
+    get:
+      summary: List available subscription plans
+      operationId: listAvailablePlans
+      tags: [Plans]
+      responses:
+        "200":
+          description: Active plans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Plan"
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/plans/subscribe:
+    post:
+      summary: Subscribe the authenticated user to a plan
+      operationId: subscribeToPlan
+      tags: [Plans]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                planId: { type: string }
+                paymentMethodId: { type: string, nullable: true }
+              required: [planId]
+              additionalProperties: false
+      responses:
+        "200":
+          description: Subscription created/updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string }
+                      planId: { type: string }
+                      currentPeriodEnd: { type: string, format: date-time }
+                    required: [status, planId, currentPeriodEnd]
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/content/{id}:
+    get:
+      summary: Get content by ID
+      operationId: getContentById
+      tags: [Content]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Content record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      title: { type: string, nullable: true }
+                      message: { type: string, nullable: true }
+                      authorId: { type: string }
+                      createdAt: { type: string, format: date-time }
+                      status: { type: string }
+                    required: [id, authorId, createdAt, status]
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/chatbots/{chatbotId}/documents:
+    post:
+      summary: Upload a document for a chatbot (multipart raw bytes, content-sniffed)
+      description: >
+        Raw file bytes in the body (max 10 MB). Metadata travels in headers:
+        `x-filename`. The MIME type is detected server-side from the byte
+        signature — the client `x-mime-type` header is not trusted.
+        Allowed: PDF, DOCX, TXT, MD.
+      operationId: uploadDocument
+      tags: [Documents]
+      parameters:
+        - name: chatbotId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: x-filename
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/pdf:
+            schema: { type: string, format: binary }
+          application/octet-stream:
+            schema: { type: string, format: binary }
+          text/plain:
+            schema: { type: string }
+          text/markdown:
+            schema: { type: string }
+      responses:
+        "201":
+          description: Stored in S3 and registered in DynamoDB
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      documentId: { type: string }
+                      status: { type: string }
+                      s3Key: { type: string }
+                      companyId: { type: string }
+                      chatbotId: { type: string }
+                    required: [documentId, status, s3Key, companyId, chatbotId]
+                    additionalProperties: false
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "403":
+          description: Chatbot owned by another company
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "415":
+          description: Unsupported media type / disallowed file type
+    get:
+      summary: List documents for a chatbot
+      operationId: listDocuments
+      tags: [Documents]
+      parameters:
+        - name: chatbotId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Documents owned by the caller's company
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/DocumentSummary"
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "403":
+          description: Chatbot owned by another company
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/documents/{documentId}:
+    get:
+      summary: Get document metadata / status
+      operationId: getDocument
+      tags: [Documents]
+      parameters:
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Document record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/DocumentSummary"
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "404":
+          description: Not found
+  /api/chat/public:
+    get:
+      summary: List recent public messages (legacy WI-002 demo surface)
+      operationId: listPublicMessages
+      tags: [Public Chat (legacy)]
+      security: []
+      responses:
+        "200":
+          description: Recent messages
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        content: { type: string }
+                        username: { type: string, nullable: true }
+                        createdAt: { type: string, format: date-time }
+                        type: { type: string }
+                      required: [id, content, createdAt, type]
+                required: [success, data]
+    post:
+      summary: Create a public message (legacy WI-002 demo surface)
+      operationId: createPublicMessage
+      tags: [Public Chat (legacy)]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content: { type: string, minLength: 1, maxLength: 1000 }
+                username: { type: string, nullable: true }
+              required: [content]
+              additionalProperties: false
+      responses:
+        "201":
+          description: Message created
+        "400":
+          description: Invalid message format
+  /api/public/chat/{chatbotId}/message:
+    post:
+      summary: Send a visitor message to a published chatbot (anonymous, WI-006)
+      description: >
+        Full contract in openspec/WI-006-retrieval-chat-openapi.yaml (error
+        examples, fallback semantics, x-credit-alert header, latency budget).
+      operationId: sendPublicChatMessage
+      tags: [Public Chat]
+      security: []
+      parameters:
+        - name: chatbotId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message: { type: string, minLength: 1, maxLength: 2000 }
+                conversation_id: { type: string, format: uuid }
+              required: [message]
+              additionalProperties: false
+      responses:
+        "200":
+          description: Grounded answer (or configured fallback on empty retrieval)
+        "400":
+          description: Validation failed
+        "402":
+          description: Monthly limit exhausted / prepaid credits exhausted
+        "404":
+          description: Chatbot not found or not published
+        "500":
+          description: Bedrock or database failure
+components:
+  securitySchemes:
+    cognitoJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Amazon Cognito access token in the Authorization header.
+  schemas:
+    BalanceResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            balance: { type: integer, minimum: 0 }
+          required: [balance]
+          additionalProperties: false
+      required: [success, data]
+    NewBalanceResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        data:
+          type: object
+          properties:
+            newBalance: { type: integer, minimum: 0 }
+          required: [newBalance]
+          additionalProperties: false
+      required: [success, data]
+    Plan:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        monthly_conversation_limit: { type: integer }
+        monthly_credit_allocated: { type: integer }
+        price_monthly: { type: integer, description: cents }
+        status: { type: string, enum: [active, inactive] }
+      required: [id, name, monthly_conversation_limit, monthly_credit_allocated, price_monthly, status]
+    DocumentSummary:
+      type: object
+      properties:
+        documentId: { type: string }
+        fileName: { type: string }
+        status: { type: string }
+        chatbotId: { type: string }
+        companyId: { type: string }
+        createdAt: { type: string, format: date-time }
+      required: [documentId, status]
+    AuthError:
+      type: object
+      properties:
+        success: { type: boolean, const: false }
+        error: { type: string }
+        code: { type: string }
+      required: [success, error, code]

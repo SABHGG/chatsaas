@@ -81,75 +81,121 @@ Defines the REST/JSON API contract for the chatSaaS platform, covering admin das
   - `GET /api/documents/:documentId`
   - Response: document object.
 
-### Credits and Plans
+### Content
 
-List plans
-- `GET /api/plans`
-- Query: none
-- Response:
-  ```json
-  {
-    "data": [
-      {
-        "id": "uuid",
-        "name": "string",
-        "monthly_conversation_limit": integer,
-        "monthly_credit_allocated": integer,
-        "price_monthly": integer (cents),
-        "status": "active|inactive",
-        "created_at": "ISO string"
-      }
-    ]
-  }
-  ```
-
-Credit ledger snapshot
-- `GET /api/credits/snapshot`
-- Query: none
-- Response:
-  ```json
-  {
-    "data": {
-      "balance": integer (credits),
-      "used_this_month": integer,
-      "limit": integer,
-      "auto_reload": boolean
-    }
-  }
-  ```
-
-Consume credit for completed conversation
-- `POST /api/credits/converse`
-- Body: `{ "chatbot_id": "uuid" }`
-- Response (202): `{ "data": { "conversation_id": "uuid" }, "request_id": "uuid" }`
-
-### Publishing
-
-- **Publish chatbot**
-  - `POST /api/chatbots/:chatbotId/publish`
-  - Body: `{ "plan_id": "uuid" }`
-  - Response (202):
+- **Get content by ID**
+  - `GET /api/content/:id`
+  - Response:
     ```json
     {
+      "success": true,
       "data": {
-        "status": "published",
-        "url": "string (shareable URL)",
-        "iframe_src": "string (embed HTML)",
-        "expires_at": "ISO string|null"
+        "id": "string",
+        "title": "string|null",
+        "message": "string|null",
+        "authorId": "string",
+        "createdAt": "ISO string",
+        "status": "string"
       }
     }
     ```
 
-- **List published chatbots**
-  - `GET /api/chatbots/published`
-  - Query: none
-  - Response: array of chatbot objects with `status: published`, `url`, `iframe_src`.
+### Credits
+
+- **Get credit balance**
+  - `GET /api/credits/balance` (authenticated via Cognito JWT)
+  - Response:
+    ```json
+    { "success": true, "data": { "balance": integer } }
+    ```
+  - Errors: 401 `UNAUTHENTICATED`.
+
+- **Debit credits**
+  - `POST /api/credits/debit`
+  - Body: `{ "amount": integer (>=1), "reason": "string|null" }`
+  - Response:
+    ```json
+    { "success": true, "data": { "newBalance": integer } }
+    ```
+  - Errors: 401, 402 insufficient credits (atomic `UpdateItem` + `ConditionExpression`, WI-002 pattern).
+
+- **Replenish credits**
+  - `POST /api/credits/replenish`
+  - Body: `{ "amount": integer (>=1) }`
+  - Response:
+    ```json
+    { "success": true, "data": { "newBalance": integer } }
+    ```
+
+### Plans
+
+- **List available plans**
+  - `GET /api/plans/available`
+  - Response:
+    ```json
+    {
+      "success": true,
+      "data": [
+        {
+          "id": "string",
+          "name": "string",
+          "monthly_conversation_limit": integer,
+          "monthly_credit_allocated": integer,
+          "price_monthly": integer (cents),
+          "status": "active|inactive"
+        }
+      ]
+    }
+    ```
+
+- **Subscribe to a plan**
+  - `POST /api/plans/subscribe`
+  - Body: `{ "planId": "string", "paymentMethodId": "string|null" }`
+  - Response:
+    ```json
+    {
+      "success": true,
+      "data": {
+        "status": "string",
+        "planId": "string",
+        "currentPeriodEnd": "ISO string"
+      }
+    }
+    ```
+
+### Public Chat (legacy demo surface, WI-002)
+
+- `GET /api/chat/public` — list recent public messages (demo data path).
+- `POST /api/chat/public` — create a public message (demo data path).
+
+### Health
+
+- `GET /healthz` — liveness probe: `{ "status": "ok" }`.
+
+### Chatbot Management & Publishing (PLANNED — WI-001, not yet implemented)
+
+The following endpoints are contract-defined but have no implementation yet. The
+single source of truth for their shapes is this document until WI-001 lands:
+
+- `GET /api/chatbots` — list chatbots for the company.
+- `POST /api/chatbots` — create a chatbot (draft).
+- `PATCH /api/chatbots/:id` — update chatbot metadata.
+- `DELETE /api/chatbots/:id` — soft delete (status `archived`).
+- `POST /api/chatbots/:chatbotId/publish` — publish chatbot (body `{ "plan_id": "uuid" }`).
+- `GET /api/chatbots/published` — list published chatbots.
+- `GET /api/public/chatbots/:chatbotId/config` — widget initialization settings.
+- `GET /api/public/chatbots/:chatbotId/iframe` — iframe embed snippet.
+
+> **Naming note (2026-08-29):** the implemented credits/plans endpoints use
+> `/api/credits/balance|debit|replenish` and `/api/plans/available|subscribe`.
+> Earlier drafts named them `/api/credits/snapshot|converse` and `/api/plans`;
+> the implemented paths above are authoritative.
 
 ## Public Chatbot Endpoints
 
 These endpoints are accessed via the public URL or iframe embed (e.g., `https://chat.saas.company.com/:chatbotId` or via embed script).
 
-### Load chatbot settings (for widget initialization)
+### Load chatbot settings (for widget initialization) — PLANNED (WI-001, not yet implemented)
 
 - `GET /api/public/chatbots/:chatbotId/config`
 - Response:
@@ -190,7 +236,7 @@ These endpoints are accessed via the public URL or iframe embed (e.g., `https://
     - Zero retrieval rows → configured fallback answer (`CHAT_FALLBACK_ANSWER`), never an ungrounded completion (AC 9).
     - Latency budget: p50 < 3 s, p95 < 8 s. Streaming (SSE) out of scope.
 
-### Generate iframe embed code
+### Generate iframe embed code — PLANNED (WI-001, not yet implemented)
 
 - `GET /api/public/chatbots/:chatbotId/iframe`
 - Response:
