@@ -9,6 +9,12 @@ import { createAuroraPgVector } from "./aurora-pgvector.js";
 import { createRdsProxy } from "./rds-proxy.js";
 import { createEmbeddingsTableResource } from "./embeddings-table-resource.js";
 import { CognitoUserPoolConstruct } from "./cognito-user-pool.js";
+import { DocumentsBucketConstruct } from "./ingest-bucket.js";
+import { DocumentsTableConstruct } from "./documents-table.js";
+import { IngestLambdaConstruct } from "./ingest-lambda.js";
+import { IngestEventBridgeRuleConstruct } from "./ingest-eventbridge-rule.js";
+import { EmbeddingsUniqueIndexConstruct } from "./ingest-embeddings-index.js";
+import { Queue, QueueEncryption } from "aws-cdk-lib/aws-sqs";
 
 /**
  * The chatSaaS dev stack: Aurora Serverless v2 + pgvector + RDS Proxy + Secrets Manager + the
@@ -151,6 +157,71 @@ export class ChatSaaSStack extends Stack {
       mfaMode: "optional",
       advancedSecurityMode: "audit",
       region: process.env.CDK_DEFAULT_REGION ?? "us-east-1",
-    });
+        });
+
+        // WI-005: ingest pipeline (S3 -> EventBridge -> Lambda -> Bedrock + pgvector).
+
+        // DLQ for terminal ingest failures.
+        const ingestDlq = new Queue(this, "IngestDlq", {
+          queueName: `chatsaas-${envName}-ingest-dlq`,
+          encryption: QueueEncryption.SQS_MANAGED,
+          retentionPeriod: Duration.days(14),
+        });
+
+        const documentsBucket = new DocumentsBucketConstruct(this, "Documents", {
+          envName: envName as "dev" | "prod",
+        });
+
+        const documentsTable = new DocumentsTableConstruct(this, "DocumentsTable", {
+          envName: envName as "dev" | "prod",
+        });
+
+        // Custom resource: add content_sha256 + unique (chatbot_id, content_sha256) to
+        // public.embeddings, then ANALYZE. This runs before the IngestLambda can fire.
+        const documentsIndex = new EmbeddingsUniqueIndexConstruct(this, "EmbeddingsUniqueIndex", {
+          vpc,
+          lambdaSecurityGroup: lambdaSg,
+          cluster,
+          secret,
+          databaseName,
+        });
+
+        const ingestLambda = new IngestLambdaConstruct(this, "Ingest", {
+          envName: envName as "dev" | "prod",
+          documentsBucket: documentsBucket.bucket,
+          documentsTable: documentsTable.table,
+          dbSecret: secret,
+          dbClusterArn: cluster.clusterArn,
+          dbName: databaseName,
+          vpc,
+          lambdaSecurityGroup: lambdaSg,
+          dlq: ingestDlq,
+          documentsIndexResource: documentsIndex.resource,
+        });
+
+        new IngestEventBridgeRuleConstruct(this, "IngestEventRule", {
+          documentsBucket: documentsBucket.bucket,
+          ingestLambda: ingestLambda.function,
+          dlq: ingestDlq,
+          envName: envName as "dev" | "prod",
+        });
+
+        // WI-005 stack outputs.
+        new CfnOutput(this, "DocumentsBucketName", {
+          value: documentsBucket.bucket.bucketName,
+          exportName: `${this.stackName}:DocumentsBucketName`,
+        });
+        new CfnOutput(this, "DocumentsTableName", {
+          value: documentsTable.table.tableName,
+          exportName: `${this.stackName}:DocumentsTableName`,
+        });
+        new CfnOutput(this, "IngestLambdaName", {
+          value: ingestLambda.function.functionName,
+          exportName: `${this.stackName}:IngestLambdaName`,
+        });
+        new CfnOutput(this, "IngestDlqUrl", {
+          value: ingestDlq.queueUrl,
+          exportName: `${this.stackName}:IngestDlqUrl`,
+        });
   }
 }

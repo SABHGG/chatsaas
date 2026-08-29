@@ -1,0 +1,612 @@
+# WI-005 Ingest Pipeline Specification
+
+## Change
+- **Name**: WI-005-ingest-pipeline
+- **Intent**: Wire the missing half of the chatSaaS RAG loop — turn a customer-uploaded document into rows in the `public.embeddings` table that WI-004 provisioned, via an event-driven S3 → EventBridge → Lambda → Bedrock Titan v2 → pgvector pipeline that is idempotent at the chunk level and tenant-scoped by the JWT-claim chain of custody landed in WI-008
+- **Scope**: 4 new infra constructs (`ingest-bucket`, `ingest-lambda`, `ingest-eventbridge-rule`, `ingest-embeddings-index`), 1 new `apps/functions/src/ingest/` module family (7 files), 3 new admin routes (`documentsUpload`, `documentsList`, `documentGet`), vitest suites for both packages, updated `server.ts` and `auth/claims.ts` SECURITY NOTE
+- **Source**: knowledge/delivery/work-items/ready/WI-005-ingest-pipeline.md
+- **Source ADRs**: 001 (Cognito), 003 (stack pinning), 004 (Bedrock + Aurora+pgvector + in-Lambda parsers), 005 (cost attribution), 006 (data partitioning)
+- **Branch**: feature/WI-005-ingest-pipeline (derived from feature/WI-008-cognito-user-pool@3a8b5b5)
+- **Artifact store**: Kaddo
+- **Tests**: vitest (functions: parser/splitter/embedder/persister/resolveTenant/handler with stubbed AWS clients; infra: CDK assertions + Lambda env-var assertions)
+
+## Why now
+
+WI-004 ships the empty `public.embeddings` table (vector(1024) + HNSW index) and the `Document` ingestion path through the RDS Proxy. WI-008 ships the JWT chain of custody that makes `custom:company_id` trustworthy for tenant authorization. Neither wires the actual event-driven ingest that fills the table.
+
+Without this WI:
+1. The embeddings table stays empty; the retrieval query in WI-006 has nothing to return.
+2. The Operator's Board (WI-007) has no upload widget to drive.
+3. The `document_processing_volume` cost-attribution counter has no writer.
+
+WI-005 is the second of four implementation WIs in this round (WI-004 → WI-005 → WI-006 → WI-007) and the first one that calls Bedrock at runtime.
+
+## Requirements
+
+### 1. Workspace additions
+
+`apps/functions/package.json` adds runtime deps:
+
+- `pdf-parse@^1.1.1` — PDF text extraction.
+- `mammoth@^1.8.0` — DOCX text extraction.
+- `@aws-sdk/client-rds-data@^3.1116.0` — RDS Data API for chunk inserts.
+- `@aws-sdk/client-sqs@^3.1116.0` — DLQ writes on terminal failures.
+
+`apps/functions/package.json` adds dev deps:
+
+- `aws-sdk-client-mock@^4.1.0` — match the infra package version.
+
+`apps/functions/src/ingest/` directory created with the modules listed in Requirement 4.
+
+`apps/functions/src/api/documentsUpload.ts`, `documentsList.ts`, `documentGet.ts` (Requirement 5).
+
+`apps/functions/src/api/__tests__/documentsUpload.test.ts`, `documentsList.test.ts`, `documentGet.test.ts`.
+
+`apps/functions/src/ingest/__tests__/` (parser/splitter/embedder/persister/resolveTenant suites).
+
+`infra/lib/ingest-bucket.ts`, `ingest-lambda.ts`, `ingest-eventbridge-rule.ts`, `ingest-embeddings-index.ts` (Requirement 3).
+
+`infra/test/ingest-bucket.test.ts`, `ingest-lambda.test.ts`, `ingest-eventbridge-rule.test.ts`, `ingest-embeddings-index.test.ts`.
+
+### 2. Document table placement (DynamoDB)
+
+The `Document` row is written to **DynamoDB** on the existing `chatsaas-${envName}-documents` table, NOT to Aurora. Aurora only carries `public.embeddings` from WI-004; putting `Document` there creates a second entity table on a vector store and forces every metadata read through the proxy. DynamoDB is the right home for the document metadata, and it gives a single-millisecond read path for the Operator's Board polling.
+
+Schema (DynamoDB table created in this WI):
+
+- `partitionKey: { name: 'id', type: AttributeType.STRING }`.
+- `billingMode: PAY_PER_REQUEST`.
+- `pointInTimeRecovery: envName === 'prod' ? true : false`.
+- `removalPolicy: envName === 'prod' ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY`.
+- Table name: `chatsaas-${envName}-documents`.
+
+Document row shape (TypeScript in `apps/functions/src/ingest/types.ts`):
+
+```ts
+export type DocumentStatus = 'uploaded' | 'processing' | 'ready' | 'failed';
+
+export interface DocumentRecord {
+  id: string;
+  chatbotId: string;
+  companyId: string;
+  ownerSub: string;
+  filename: string;
+  mimeType: string;
+  byteCount: number;
+  status: DocumentStatus;
+  s3Key: string;
+  metadata: {
+    ingest?: {
+      chunkCount: number;
+      modelId: string;
+      totalLatencyMs: number;
+      contentSha256: string;
+      emptyChunkCount: number;
+      completedAt: string;
+    };
+    error?: {
+      errorClass: string;
+      message: string;
+      failedAt: string;
+    };
+  };
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
+This shape is the contract between the three admin routes, the IngestLambda handler, and the Operator's Board in WI-007. Adding fields is non-breaking; removing or renaming is breaking and requires an AC revision.
+
+### 3. Infra constructs
+
+#### 3.1 `infra/lib/ingest-bucket.ts` — `DocumentsBucketConstruct`
+
+Exports:
+
+```ts
+export interface DocumentsBucketConstructProps {
+  readonly envName: 'dev' | 'prod';
+  readonly removalPolicy?: RemovalPolicy;
+}
+```
+
+Creates one `aws-cdk-lib/aws-s3.Bucket`:
+
+- `bucketName: chatsaas-${envName}-documents-${account}`.
+- `encryption: BucketEncryption.S3_MANAGED` (SSE-S3).
+- `versioned: true`.
+- `blockPublicAccess: BlockPublicAccess.BLOCK_ALL`.
+- `enforceSSL: true`.
+- `lifecycleRules: [{ transitions: [{ storageClass: GLACIER, transitionAfter: Duration.days(180) }] }]` — no IA tier; the IA→Glacier jump is intentional, cold docs only matter on rare retrieval.
+- `eventBridgeEnabled: true` (the bucket emits events to EventBridge; the WI-005 rule consumes them).
+- `removalPolicy: props.removalPolicy ?? (envName === 'prod' ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY)`.
+- `autoDeleteObjects: envName !== 'prod'`.
+
+One CfnOutput: `DocumentsBucketName`.
+
+The construct wires no bucket policy. The IngestLambda IAM (3.2) is the only path in; the admin route writes via the API's IAM, not via the bucket policy.
+
+#### 3.2 `infra/lib/ingest-lambda.ts` — `IngestLambdaConstruct`
+
+Exports:
+
+```ts
+export interface IngestLambdaConstructProps {
+  readonly envName: 'dev' | 'prod';
+  readonly documentsBucket: IBucket;
+  readonly documentsTable: ITable;
+  readonly companiesTable: ITable;
+  readonly dbSecret: ISecret;
+  readonly dbClusterArn: string;
+  readonly dbName: string;
+  readonly vpc: IVpc;
+  readonly lambdaSecurityGroup: ISecurityGroup;
+  readonly dlq: IQueue;
+  readonly documentsIndexResource: CustomResource; // for ordering
+}
+```
+
+Creates one `aws-cdk-lib/aws-lambda-nodejs.NodejsFunction`:
+
+- `functionName: chatsaas-${envName}-ingest`.
+- `runtime: Runtime.NODEJS_20_X`.
+- `entry: ${repoRoot}/apps/functions/src/ingest/handler.ts`.
+- `handler: handler`.
+- `memorySize: 1024`.
+- `timeout: Duration.minutes(5)`.
+- `vpc, vpcSubnets: { subnetType: SubnetType.PRIVATE_WITH_EGRESS }, securityGroups: [props.lambdaSecurityGroup]`.
+- `tracing: Tracing.ACTIVE`.
+- `logRetention: RetentionDays.ONE_MONTH`.
+- `deadLetterQueue: props.dlq`.
+- `reservedConcurrentExecutions: 10` — one account-level Bedrock default quota fits 10 concurrent ingest invocations.
+- `environment: { DOCUMENTS_BUCKET, DOCUMENTS_TABLE, COMPANIES_TABLE, DB_SECRET_ARN, DB_CLUSTER_ARN, DB_NAME, BEDROCK_EMBED_MODEL_ID=amazon.titan-embed-text-v2:0, CHUNK_SIZE=1000, CHUNK_OVERLAP=200, AWS_NODEJS_CONNECTION_REUSE_ENABLED=1, LOG_LEVEL }`.
+- `environment` deep-merges with `ssmParameterAccess` to fetch `RDS_PROXY_ENDPOINT` from SSM at cold start (`BEDROCK_REGION` SSM parameter too — keeps the Bedrock region out of the bundle).
+
+IAM policy statements (least privilege):
+
+- `s3:GetObject` on `${documentsBucket.bucketArn}/*`.
+- `dynamodb:GetItem` + `dynamodb:UpdateItem` on the documents table ARN.
+- `dynamodb:GetItem` on the companies table ARN (for `resolveTenant` ownership check).
+- `bedrock:InvokeModel` on `arn:aws:bedrock:${region}::foundation-model/amazon.titan-embed-text-v2:0`.
+- `rds-data:ExecuteStatement` on the cluster ARN.
+- `secretsmanager:GetSecretValue` on the DB secret ARN.
+- `sqs:SendMessage` on the DLQ ARN.
+- VPC execution role is added by the L2 construct automatically.
+
+`dependsOn: [props.documentsIndexResource]` — the unique index must exist before any insert lands.
+
+#### 3.3 `infra/lib/ingest-eventbridge-rule.ts` — `IngestEventBridgeRuleConstruct`
+
+Exports:
+
+```ts
+export interface IngestEventBridgeRuleConstructProps {
+  readonly documentsBucket: IBucket;
+  readonly ingestLambda: IFunction;
+  readonly dlq: IQueue;
+  readonly envName: 'dev' | 'prod';
+}
+```
+
+Creates one `aws-cdk-lib/aws-events.Rule`:
+
+- `eventPattern: { 'source': ['aws.s3'], 'detailType': ['Object Created'], 'detail': { 'bucket': { 'name': [documentsBucket.bucketName] }, 'object': { 'key': [{ 'prefix': '' }] } } }`.
+- `targets: [new LambdaFunction(props.ingestLambda, { deadLetterQueue: props.dlq, retryAttempts: 3, maxEventAge: Duration.hours(24) })]`.
+- `ruleName: chatsaas-${envName}-ingest-rule`.
+
+The construct is intentionally tolerant of the rule firing on non-document keys (the `chatbot_id/` path prefix is the only one the Lambda cares about; anything else logs and exits).
+
+#### 3.4 `infra/lib/ingest-embeddings-index.ts` — `EmbeddingsUniqueIndexConstruct`
+
+Exports:
+
+```ts
+export interface EmbeddingsUniqueIndexConstructProps {
+  readonly cluster: ServerlessCluster;
+  readonly secret: ISecret;
+  readonly databaseName: string;
+  readonly vpc: IVpc;
+  readonly lambdaSecurityGroup: ISecurityGroup;
+}
+```
+
+Creates one `CustomResource` whose SQL is the concatenation of:
+
+1. `ALTER TABLE IF EXISTS public.embeddings ADD COLUMN IF NOT EXISTS content_sha256 BYTEA;`
+2. `CREATE UNIQUE INDEX IF NOT EXISTS embeddings_chatbot_content_sha256_idx ON public.embeddings (chatbot_id, content_sha256);`
+3. `ANALYZE public.embeddings;`
+
+The custom resource is implemented as a Node 20 Lambda inline (mirrors the pattern in WI-004's `embeddings-table-resource.ts`) using the RDS Data API. The handler reads the `RequestType` from the CloudFormation event and runs the SQL on `Create` and `Update` (the migration is forward-only; `Delete` is a no-op because the Aurora cluster is `RETAIN`-protected and the index drops with the table).
+
+The construct is a sibling of the WI-004 embeddings-table construct. It is invoked AFTER the embeddings table exists (the stack-level `dependsOn` chain in §4 enforces ordering).
+
+### 4. Stack composition
+
+`infra/lib/chat-saas-stack.ts` (extended in this WI) wires the four new constructs:
+
+```ts
+// After CognitoUserPoolConstruct (WI-008) and the existing Aurora resources (WI-004):
+
+const documentsTable = new Table(this, 'DocumentsTable', { /* per §2 schema */ });
+const documentsBucket = new DocumentsBucketConstruct(this, 'DocumentsBucket', { envName });
+
+const documentsIndex = new EmbeddingsUniqueIndexConstruct(this, 'EmbeddingsIndex', {
+  cluster, secret, databaseName, vpc, lambdaSecurityGroup: lambdaSg,
+});
+documentsIndex.resource.node.addDependency(/* embeddings table resource from WI-004 */);
+
+const dlq = new Queue(this, 'IngestDLQ', {
+  queueName: `chatsaas-${envName}-ingest-dlq`,
+  retentionPeriod: Duration.days(14),
+  encryption: QueueEncryption.SQS_MANAGED,
+});
+
+const ingestLambda = new IngestLambdaConstruct(this, 'IngestLambda', {
+  envName, documentsBucket, documentsTable, companiesTable, /* … */ dlq,
+  documentsIndexResource: documentsIndex.resource,
+});
+ingestLambda.function.node.addDependency(documentsIndex.resource);
+
+new IngestEventBridgeRuleConstruct(this, 'IngestRule', {
+  documentsBucket, ingestLambda: ingestLambda.function, dlq, envName,
+});
+```
+
+The four CfnOutputs added: `DocumentsBucketName`, `DocumentsTableName`, `IngestLambdaName`, `IngestRuleArn`.
+
+### 5. apps/functions modules
+
+#### 5.1 `ingest/types.ts`
+
+Pure type module exporting `DocumentRecord`, `DocumentStatus`, `IngestEvent` (S3 event shape), `Chunk`, `EmbeddingRow`, `IngestError`, `BedrockEmbeddingRequest`, `BedrockEmbeddingResponse`. No runtime code.
+
+#### 5.2 `ingest/logger.ts`
+
+Tiny wrapper over `console.log`/`console.error` that emits structured JSON lines with the fields required by the WI-005 spec: `request_id`, `document_id`, `chatbot_id`, `company_id`, `chunk_index`, `embedding_model_id`, `latency_ms`, `error_class`, `level`. Uses `process.env.AWS_LAMBDA_REQUEST_ID` for the request id when present.
+
+#### 5.3 `ingest/parsePdf.ts`
+
+```ts
+export async function parsePdf(buffer: Buffer): Promise<string[]>
+```
+
+Calls `pdf-parse` (CommonJS — wrapped in a `createRequire` shim because the package is CJS) and returns an array of page-level strings. Pages with no extractable text return `''` and the caller drops them.
+
+#### 5.4 `ingest/parseDocx.ts`
+
+```ts
+export async function parseDocx(buffer: Buffer): Promise<string>
+```
+
+Calls `mammoth.extractRawText({ buffer })` and returns a single string. DOCX is page-less from mammoth's API; the splitter handles chunking.
+
+#### 5.5 `ingest/parseText.ts`
+
+```ts
+export async function parseText(buffer: Buffer, mimeType: string): Promise<string>
+```
+
+UTF-8 decode, strip BOM, normalize line endings, return the string.
+
+#### 5.6 `ingest/splitter.ts`
+
+```ts
+export interface SplitOptions { chunkSize: number; chunkOverlap: number; }
+export function splitText(content: string, opts: SplitOptions): Chunk[]
+```
+
+Wraps `RecursiveCharacterTextSplitter` from `langchain/text_splitter`. Defaults: `chunkSize = 1000`, `chunkOverlap = 200`, separators `['\n\n', '\n', '. ', ' ', '']`. Each chunk carries `{ content, contentSha256, index }`. The `contentSha256` is `crypto.createHash('sha256').update(content).digest()`.
+
+#### 5.7 `ingest/embedBedrock.ts`
+
+```ts
+export interface EmbedOptions { modelId: string; region: string; }
+export async function embedChunks(chunks: Chunk[], opts: EmbedOptions): Promise<number[][]>
+```
+
+Wraps `@aws-sdk/client-bedrock-runtime` `InvokeModelCommand` for `amazon.titan-embed-text-v2:0`. Accepts up to 25 chunks per `InvokeModel` call (the API's batched-input limit). Returns a `number[][]` of length-1024 vectors.
+
+Bounded exponential backoff with jitter on `ThrottlingException`: 5 attempts, base 200 ms, cap 5 s, ±20% jitter. No retry on `ValidationException` or `AccessDeniedException` — those throw to the caller, which routes to the DLQ.
+
+#### 5.8 `ingest/persistEmbeddings.ts`
+
+```ts
+export interface PersistOptions { clusterArn: string; secretArn: string; database: string; }
+export async function persistChunks(opts: PersistOptions, rows: EmbeddingRow[]): Promise<{ insertedCount: number }>
+```
+
+Uses `@aws-sdk/client-rds-data` `ExecuteStatementCommand`. For each row:
+
+```sql
+INSERT INTO public.embeddings (id, chatbot_id, company_id, content, content_sha256, embedding)
+VALUES (:id, :chatbotId, :companyId, :content, :contentSha256, :embedding::vector)
+ON CONFLICT (chatbot_id, content_sha256) DO NOTHING;
+```
+
+The `ON CONFLICT` is a no-op the first time; the second upload of the same content is a no-op. The unique index from §3.4 is the source of truth for "have I embedded this chunk before".
+
+Returns `{ insertedCount }` from the `RETURNING` count returned by the Data API. (The Data API supports `RETURNING` for INSERT in PostgreSQL 16.)
+
+#### 5.9 `ingest/resolveTenant.ts`
+
+```ts
+export interface ResolvedTenant {
+  sub: string;
+  companyId: string;
+  chatbotId: string;
+  documentId?: string;
+}
+export async function resolveTenant(input: {
+  jwtClaims: CognitoAccessTokenClaims;
+  pathParams: { chatbotId: string; documentId?: string };
+  documentRow: DocumentRecord | null; // null on upload
+  companiesTable: string;
+  documentsTable: string;
+  ddb: DynamoDBDocumentClient;
+}): Promise<ResolvedTenant>
+```
+
+Reads the JWT-claimed `sub` and `custom:company_id`. **Reads only** the JWT; the security invariant is that the claim is server-set by the WI-008 post-confirmation Lambda (AC-13 + AC-14). This module does NOT trust body or query fields for `companyId` or `chatbotId`. If a body field is present, the test (5.13) asserts it is ignored.
+
+The function asserts:
+
+1. `sub` is non-empty.
+2. `custom:company_id` is non-empty (otherwise 403).
+3. The `:chatbotId` path param is non-empty.
+4. If `documentRow` is provided, its `chatbotId` matches the path param, AND its `companyId` matches the JWT-claimed `companyId`. Otherwise 403.
+5. If `documentRow` is null (upload path), the function returns `{ sub, companyId: jwt.companyId, chatbotId: pathParams.chatbotId }` without further lookup; the S3 key prefix is treated as a hint and re-validated by the IngestLambda later.
+
+Throws a typed `TenantResolutionError` that the route handlers convert to 403.
+
+#### 5.10 `ingest/handler.ts`
+
+```ts
+export const handler: S3EventHandler = async (event) => { /* … */ }
+```
+
+The glue. Steps per S3 record:
+
+1. Parse the bucket + key. If the key does not match `^([^/]+)/([^/]+)/([^/]+)/(.*)$` (company_id/chatbot_id/document_id/filename), log + return.
+2. Load the `Document` row by `document_id`. If not found, log + return (the upload route always writes the row before the S3 PUT completes; this is defensive).
+3. Re-validate the tenant via `resolveTenant`.
+4. Update `Document.status` to `processing` (DynamoDB UpdateItem with `ConditionExpression: status = :uploaded` — no double-processing on EventBridge retry).
+5. `GetObject` the file from S3.
+6. Pick the parser by `mimeType`.
+7. Split.
+8. Embed in batches of 25.
+9. Persist via RDS Data API.
+10. Update `Document.status` to `ready`, write `metadata.ingest` JSON.
+11. On terminal failure: UpdateItem `status = failed`, write `metadata.error`, push to DLQ via SQS, write `s3://<bucket>/_failed/<document_id>/error.json`.
+
+All steps log structured JSON.
+
+#### 5.11 `api/documentsUpload.ts` — `documentsUploadPlugin`
+
+`POST /api/chatbots/:chatbotId/documents`. Multipart, max 10 MB, allowed types `.pdf .docx .txt .md`. Pipeline:
+
+1. Authn hook (existing Cognito JWT verifier).
+2. `resolveTenant({ jwtClaims, pathParams, documentRow: null })`.
+3. Read the multipart file into a buffer.
+4. Generate a UUID v4 as `document_id`.
+5. Compute the S3 key: `s3://<bucket>/<companyId>/<chatbotId>/<document_id>/<filename>`.
+6. `s3:PutObject` the buffer.
+7. `dynamodb:PutItem` the `Document` row (status `uploaded`).
+8. Return 201 with `{ documentId, status: 'uploaded', s3Key }`.
+
+The route is the only writer of the S3 object; the IngestLambda is the only consumer. The `s3:ObjectCreated:Put` event fires after step 6 and triggers the Lambda.
+
+#### 5.12 `api/documentsList.ts` and `api/documentGet.ts`
+
+`GET /api/chatbots/:chatbotId/documents` returns the list of `Document` rows for the chatbot (scoped to the JWT's `companyId`), ordered by `createdAt desc`.
+
+`GET /api/documents/:documentId` returns the single row. `resolveTenant` re-validates the document's `companyId` against the JWT.
+
+Both return 404 on miss and 403 on cross-tenant access.
+
+#### 5.13 `server.ts` registration
+
+`apps/functions/src/server.ts` adds three `fastify-plugin` registrations under the existing `userPreHook` (the Cognito JWT verifier). They are mounted as:
+
+- `documentsUploadPlugin` at `POST /api/chatbots/:chatbotId/documents`.
+- `documentsListPlugin` at `GET /api/chatbots/:chatbotId/documents`.
+- `documentGetPlugin` at `GET /api/documents/:documentId`.
+
+No new auth path; the same hook serves all three.
+
+### 6. SECURITY NOTE update
+
+`apps/functions/src/auth/claims.ts` updates the SECURITY NOTE on `AuthenticatedUser.companyId` to read:
+
+> **SECURITY NOTE (revised for WI-005)** — `custom:company_id` IS the tenant authorization source for write paths. The chain of custody is: (1) the WI-008 post-confirmation Lambda is the sole writer of the immutable `custom:company_id` attribute, (2) the SignUp form and the UserPoolClient `writeAttributes` whitelist exclude the attribute (AC-13), and (3) no other IAM principal in the stack has `cognito-idp:AdminUpdateUserAttributes` on the User Pool (AC-14). `resolveTenant` reads the claim and treats it as the authoritative `companyId`. **The `company_id/` and `chatbot_id/` S3 key prefix in the upload path is a hint, not authority**; the IngestLambda re-resolves ownership from the Document row before any Bedrock or Aurora call. Body or query field overrides of `companyId` or `chatbotId` MUST be ignored — `resolveTenant`'s unit test asserts this and is a release blocker.
+
+### 7. Vitest assertions
+
+#### 7.1 `apps/functions/src/ingest/__tests__/`
+
+- `parsePdf.test.ts` — 4 cases: valid 4-page fixture, single-page, scanned-PDF (empty pages, no throw), corrupt header (throws).
+- `parseDocx.test.ts` — 3 cases: valid DOCX fixture, empty document, malformed buffer.
+- `parseText.test.ts` — 2 cases: UTF-8 with BOM, CRLF normalization.
+- `splitter.test.ts` — 3 cases: default chunk size, overlap correctness, empty input.
+- `embedBedrock.test.ts` — 4 cases: 1-chunk happy path, 25-chunk batch, `ThrottlingException` retry (asserts ≥1 retry), `ValidationException` non-retry.
+- `persistEmbeddings.test.ts` — 4 cases: single insert, batch insert, `ON CONFLICT DO NOTHING` (zero returned rows), Data API error propagation.
+- `resolveTenant.test.ts` — 3 cases: happy path, missing `custom:company_id` (throws), **body field `company_id = 'spoofed'` is ignored**.
+- `handler.test.ts` (optional this WI) — 2 cases: full happy path with stubbed S3 + Bedrock + RDS Data, terminal failure routes to DLQ.
+
+All AWS clients are stubbed with `aws-sdk-client-mock`. The `handler.test.ts` integration is optional and may move to a follow-up if test isolation becomes painful.
+
+#### 7.2 `apps/functions/src/api/__tests__/`
+
+- `documentsUpload.test.ts` — 5 cases: happy path (returns 201 with documentId), 401 without JWT, 403 on cross-tenant `chatbotId`, 413 over 10 MB, 415 on disallowed MIME.
+- `documentsList.test.ts` — 3 cases: returns scoped list, 404 on missing chatbot, 403 on cross-tenant.
+- `documentGet.test.ts` — 3 cases: returns the document, 404 on miss, 403 on cross-tenant.
+
+#### 7.3 `infra/test/`
+
+- `ingest-bucket.test.ts` — asserts SSE-S3, versioning, eventBridgeEnabled, public access block, lifecycle rule, two CfnOutputs.
+- `ingest-lambda.test.ts` — asserts Node 20, 1024 MB, 5-min timeout, DLQ, IAM statements scope (Bedrock ARN, S3 bucket ARN, RDS Data cluster ARN, SQS DLQ ARN, secrets ARN), env vars match the spec, `dependsOn` to the index resource.
+- `ingest-eventbridge-rule.test.ts` — asserts the event pattern (`aws.s3` source, `Object Created` detailType, bucket name filter), Lambda target, retry attempts, max event age, DLQ.
+- `ingest-embeddings-index.test.ts` — asserts the custom resource SQL contains the three statements in §3.4, the Lambda handler is Node 20, IAM is scoped to the cluster ARN and secret ARN.
+
+A `cdk synth` snapshot of the full template is committed at `infra/test/__snapshots__/ingest-stack.test.ts.snap`.
+
+## Scenarios
+
+### Developer first deploy (dev account, with WI-004 and WI-008 already deployed)
+
+1. Developer runs `pnpm install` at the repo root.
+2. `cd infra && pnpm synth` produces a CloudFormation template that adds: the documents bucket, the documents DynamoDB table, the IngestLambda, the EventBridge rule, the DLQ, the unique-index custom resource, and the four CfnOutputs. Total resource count grows by 8 (bucket, table, lambda, rule, DLQ, custom resource, log group, role).
+3. `pnpm -F infra test` runs all CDK assertions green.
+4. `pnpm -F functions test` runs all 28+ ingest module vitest cases green, including the spoofing-resistance test.
+5. `cdk deploy` creates the new resources. The IngestLambda's IAM is created in the stack.
+6. After deploy, a developer can `aws s3 ls s3://chatsaas-dev-documents-<account>/` and confirm the bucket is empty and eventBridgeEnabled.
+
+### End-user upload
+
+1. Authenticated user opens the Operator's Board (WI-007).
+2. Picks a file (`mydoc.pdf`, 2.4 MB).
+3. The frontend POSTs to `/api/chatbots/<chatbotId>/documents` with multipart body.
+4. The route writes the file to S3 under `s3://<bucket>/<companyId>/<chatbotId>/<docId>/mydoc.pdf` and inserts a `Document` row in `uploaded` status.
+5. The S3 event fires the EventBridge rule.
+6. The IngestLambda is invoked. It re-resolves ownership, parses the PDF, splits, embeds, persists.
+7. The Document row transitions `uploaded → processing → ready`. The Operator's Board polls `GET /api/documents/<docId>` and updates the UI.
+
+### Re-upload of the same file (idempotency)
+
+1. The user uploads the same `mydoc.pdf` to the same chatbot.
+2. The route creates a NEW `documentId` (a re-upload is a new document, per the design).
+3. The IngestLambda re-parses and re-embeds.
+4. The `INSERT ... ON CONFLICT DO NOTHING` is a no-op for chunks whose `(chatbot_id, content_sha256)` already exists in the table.
+5. `metadata.ingest.insertedCount` is 0 (or near-0). The `Document` row is still `ready`.
+6. `document_processing_volume` metering is based on `byteCount`, not on chunk count, so the customer is not double-billed for the same content.
+
+### Tenant isolation failure mode (proves AC-13 + AC-14 + resolveTenant work)
+
+1. Attacker authenticates as user A (company `Acme`).
+2. Attacker crafts a multipart upload with body field `company_id = "Beta"` and `:chatbotId` from `Beta`.
+3. `resolveTenant` reads the JWT claim (`Acme`), reads the path param (`Beta`), and compares to the body — the body is ignored.
+4. The Document row written by the route has `companyId = 'Acme'` (from the JWT), `chatbotId = 'Beta'`.
+5. The IngestLambda re-resolves and finds a mismatch (`Acme` ≠ `Beta`'s owner) and exits.
+6. The attacker has not written to `Beta`'s embeddings.
+
+### Bedrock throttling (R-2)
+
+1. A 100-page PDF produces 250+ chunks.
+2. The embedder batches 25 per call, total 10 calls in a tight burst.
+3. Bedrock returns `ThrottlingException` on the 8th call.
+4. The embedder retries with exponential backoff (200 ms × 2, ±20% jitter), succeeds on attempt 3.
+5. The `metadata.ingest.totalLatencyMs` reflects the retry latency. The Document row transitions to `ready` normally.
+
+### Terminal failure (parse error)
+
+1. A corrupt-header PDF is uploaded.
+2. The IngestLambda invokes `parsePdf` and gets a `ParseError`.
+3. The handler writes `Document.status = failed`, `metadata.error.errorClass = 'ParseError'`, pushes to the DLQ, writes the S3 marker file.
+4. The Operator's Board shows the failed status; the customer's UI displays a "couldn't read this file" message (WI-007's UX).
+
+## Out of scope
+
+- Scanned-PDF OCR (Textract fallback). ADR-004 defers this; the parser module is structured so a Textract branch is one file change.
+- A Document table in Aurora. The `Document` row lives in DynamoDB. A follow-up WI migrates when the rest of the entity tables move.
+- Cost-metering writes (the `document_processing_volume` counter job is WI-007).
+- The Operator's Board UI (WI-007).
+- Retrieval + chat (WI-006). Depends on this WI landing.
+- A `users` table for multi-org migration. The WI-008 chain of custody is sufficient for MVP single-tenant.
+- Per-chatbot encryption (KMS) and cross-region replication.
+
+## Risks
+
+1. **Bedrock throttling (R-2)**. Mitigated by batched inputs (25 per call) + bounded exponential backoff with jitter (5 attempts, base 200 ms, cap 5 s, ±20% jitter).
+2. **Aurora Serverless v2 cold start**. First invocation after idle can take 5–10 s. Mitigated by the async event-driven design (the API returns 201 immediately; the customer does not wait).
+3. **Idempotency under partial failure (R-5)**. Mitigated by the `(chatbot_id, content_sha256)` unique index + `INSERT ... ON CONFLICT DO NOTHING` + the `Document.status` state machine. A retry that lands after some chunks are already inserted will be a no-op for those chunks.
+4. **Tenant isolation regression (R-1)**. Mitigated by the SECURITY NOTE update, the spoofing test, and the IngestLambda re-validation. Any future change to `resolveTenant` is required to preserve the test.
+5. **S3 key prefix spoofing**. An attacker who knows another tenant's `chatbotId` could craft a path. The IngestLambda re-resolves the Document row's `companyId` and compares to the JWT's `companyId`; mismatch is a no-op + structured log.
+6. **PDF parser CJS interop (R-8)**. `pdf-parse` is CJS. Mitigated by the `createRequire` shim in the parser module. The unit test asserts the parser works in ESM.
+7. **RDS Data API `::vector` cast**. The Data API has historically had quirks with custom types. Mitigated by an early spike during implementation: if the cast is rejected, switch to a single column per call or use a `bytea` representation. The env var `DB_CONNECTION_MODE=data_api|pg_proxy` is the documented fallback.
+8. **The `EventBridge` rule fires on every S3 PUT, not just uploads from the admin route**. A direct `aws s3 cp` will trigger the Lambda. The handler logs and exits when the Document row is missing. A direct S3 PUT is also an IAM denial for non-admin principals, so the blast radius is small.
+
+## Validation
+
+Run after the branch is implemented and pushed:
+
+- `pnpm install` at the repo root — resolves the new ingest dependencies in `apps/functions` and the CDK additions.
+- `pnpm -F infra synth` — CloudFormation template synthesizes cleanly; the eight new resources appear.
+- `pnpm -F infra test` — vitest CDK assertions green, including the four new construct tests.
+- `pnpm -F functions type-check` — `tsc --noEmit` exits 0 on the new modules.
+- `pnpm -F functions test` — vitest green across legacy + new test cases (≥28 new).
+- `pnpm -F functions test resolveTenant` — the spoofing test specifically.
+- `kaddo guard` — 0 findings, 0 fyi.
+- `kaddo impact RM-001 WI-005` — impact report lists the new files, the modified `server.ts`, the new `infra/lib/` constructs, and the new env vars.
+- `kaddo questions` — no new blocking question that this WI should have resolved.
+
+**Green-bar criteria (all must be true):**
+
+1. The CDK template synthesizes with the eight new resources and the unique-index SQL.
+2. `pnpm -F functions test` and `pnpm -F infra test` are green.
+3. `kaddo guard` is green.
+4. The spoofing test in `resolveTenant` passes.
+5. `apps/functions/README.md` documents the S3 → EventBridge → Lambda contract, the chunk size / overlap defaults, the DLQ + marker-file failure mode, and the tenant-isolation invariant.
+6. A manual end-to-end smoke (documented in the README) uploads a PDF and observes `Document.status: ready` plus the expected `embeddings` row count within 60 s.
+
+## Open Questions
+
+All decision candidates for this WI are resolved (2026-08-28). The WI is eligible to move from `ready` to `in_progress` immediately on branch creation.
+
+1. **DC-005-1 — Sub → company_id mapping location** — RESOLVED via WI-008.
+2. **DC-005-2 — Bedrock model id** — RESOLVED (`amazon.titan-embed-text-v2:0`).
+3. **DC-005-3 — Chunk size + overlap** — RESOLVED (1000 / 200).
+4. **DC-005-4 — S3 bucket placement** — RESOLVED (this WI).
+5. **DC-005-5 — RDS connection path** — RESOLVED (RDS Data API for v1; env var `DB_CONNECTION_MODE` documents the fallback).
+
+## Related Files (paths only)
+
+- `apps/functions/src/ingest/types.ts`
+- `apps/functions/src/ingest/logger.ts`
+- `apps/functions/src/ingest/parsePdf.ts`
+- `apps/functions/src/ingest/parseDocx.ts`
+- `apps/functions/src/ingest/parseText.ts`
+- `apps/functions/src/ingest/splitter.ts`
+- `apps/functions/src/ingest/embedBedrock.ts`
+- `apps/functions/src/ingest/persistEmbeddings.ts`
+- `apps/functions/src/ingest/resolveTenant.ts`
+- `apps/functions/src/ingest/handler.ts`
+- `apps/functions/src/ingest/__tests__/parsePdf.test.ts`
+- `apps/functions/src/ingest/__tests__/parseDocx.test.ts`
+- `apps/functions/src/ingest/__tests__/parseText.test.ts`
+- `apps/functions/src/ingest/__tests__/splitter.test.ts`
+- `apps/functions/src/ingest/__tests__/embedBedrock.test.ts`
+- `apps/functions/src/ingest/__tests__/persistEmbeddings.test.ts`
+- `apps/functions/src/ingest/__tests__/resolveTenant.test.ts`
+- `apps/functions/src/api/documentsUpload.ts`
+- `apps/functions/src/api/documentsList.ts`
+- `apps/functions/src/api/documentGet.ts`
+- `apps/functions/src/api/__tests__/documentsUpload.test.ts`
+- `apps/functions/src/api/__tests__/documentsList.test.ts`
+- `apps/functions/src/api/__tests__/documentGet.test.ts`
+- `apps/functions/src/server.ts` (modified)
+- `apps/functions/src/auth/claims.ts` (SECURITY NOTE updated)
+- `apps/functions/src/db/schema.ts` (DocumentRecord type + TABLES.DOCUMENTS)
+- `apps/functions/package.json` (deps)
+- `apps/functions/.env.example` (new env vars)
+- `apps/functions/README.md` (S3 → EventBridge → Lambda contract + tenant isolation invariant)
+- `infra/lib/ingest-bucket.ts`
+- `infra/lib/ingest-lambda.ts`
+- `infra/lib/ingest-eventbridge-rule.ts`
+- `infra/lib/ingest-embeddings-index.ts`
+- `infra/lib/chat-saas-stack.ts` (modified)
+- `infra/test/ingest-bucket.test.ts`
+- `infra/test/ingest-lambda.test.ts`
+- `infra/test/ingest-eventbridge-rule.test.ts`
+- `infra/test/ingest-embeddings-index.test.ts`
+- `infra/README.md` (deploy smoke test)
+- `knowledge/delivery/work-items/ready/WI-005-ingest-pipeline.md` (promoted from draft)
+- `knowledge/tech/decisions/004-aws-service-selection-for-ai-capabilities.md` (read-only; design is downstream)
+
+## Next WIs
+
+- **WI-006** — Retrieval + chat handler. Reads the rows this WI writes.
+- **WI-007** — Operator's Board UI. Drives the upload route and polls the status route.
+- **WI-009 (proposed)** — Cost metering job. Nightly aggregation of `Document.metadata.ingest.byteCount` into `UsageMetric.document_processing_volume`.
+
+## Sister-WI placement
+
+The dependency graph in the round is linear at the top: **WI-004 → WI-005 → WI-006**. WI-007 fans out from both WI-005 and WI-006. WI-008 sits at the leaf (already done; this WI consumes its chain of custody).

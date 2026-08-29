@@ -11,6 +11,9 @@ import { plansAvailablePlugin } from './api/plansAvailable'
 import { plansSubscribePlugin } from './api/plansSubscribe'
 import { contentGetPlugin } from './api/contentGet'
 import { chatPublicPlugin } from './api/chatPublic'
+import { documentsUploadPlugin } from './api/documentsUpload'
+import { documentsListPlugin } from './api/documentsList'
+import { documentGetPlugin } from './api/documentGet'
 
 /**
  * Public surface — these routes skip the Cognito JWT verification. Everything
@@ -42,6 +45,19 @@ export interface CreateServerOptions {
    * Disable request logging. Default: `false` (logger is enabled).
    */
   loggerDisabled?: boolean
+  /**
+   * Documents bucket name (WI-005). Required to register the upload route.
+   * If omitted, the upload / list / get routes are not mounted.
+   */
+  documentsBucket?: string
+  /**
+   * Documents DynamoDB table name (WI-005). Required to register the upload / list / get routes.
+   */
+  documentsTable?: string
+  /**
+   * Chatbots DynamoDB table name (WI-005). Required for cross-tenant ownership checks in upload/list routes.
+   */
+  chatbotsTable?: string
 }
 
 export interface CreateServerDeps {
@@ -198,6 +214,36 @@ export async function createServer(
     preHook: deps.userPreHook,
   })
 
+  // WI-005 ingest routes. Mounted only when both env vars are configured so
+  // existing tests of the chat surface keep running without DynamoDB / S3.
+  const documentsBucket = opts.documentsBucket ?? process.env.DOCUMENTS_BUCKET
+  const documentsTable = opts.documentsTable ?? process.env.DOCUMENTS_TABLE
+  const chatbotsTable = opts.chatbotsTable ?? process.env.CHATBOTS_TABLE_NAME
+  if (documentsBucket && documentsTable && chatbotsTable) {
+    await fastify.register(documentsUploadPlugin, {
+      prefix: '/api/chatbots',
+      preHook: deps.userPreHook,
+      documentsBucket,
+      documentsTable,
+      chatbotsTable,
+    })
+    await fastify.register(documentsListPlugin, {
+      prefix: '/api/chatbots',
+      preHook: deps.userPreHook,
+      documentsTable,
+      chatbotsTable,
+    })
+    await fastify.register(documentGetPlugin, {
+      prefix: '/api/documents',
+      preHook: deps.userPreHook,
+      documentsTable,
+    })
+  } else {
+    fastify.log.warn(
+      'WI-005 document routes disabled: DOCUMENTS_BUCKET, DOCUMENTS_TABLE, and/or CHATBOTS_TABLE_NAME not set'
+    )
+  }
+
   // Mount the public chat surface. It stays anonymous by design (chatbots
   // are publicly embedded), so no hook is attached here.
   await fastify.register(chatPublicPlugin, {
@@ -238,7 +284,7 @@ export async function startServer(): Promise<void> {
   }
 
   const port = Number(process.env.PORT ?? 3001)
-  const host = process.env.HOST ?? '0.0.0.0'
+  const host = process.env.HOST ?? '0.00.0.0'
 
   const fastify = await createServer({
     cognito: cognitoConfigForCognito(
