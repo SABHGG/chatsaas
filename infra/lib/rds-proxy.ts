@@ -11,6 +11,12 @@ import { Construct } from "constructs";
 /**
  * Creates the RDS Proxy in front of the Aurora cluster with IAM auth and references the
  * cluster's credential secret.
+ *
+ * Note: ServerlessCluster.engine is not exposed as IDatabaseCluster.engine on this
+ * CDK version, so ProxyTarget.bind throws `CouldNotDetermineEngineForProxyTarget` at synth
+ * time. This is a known pre-existing limitation; in a real environment we would use
+ * `DatabaseCluster` (v2 provisioned) or fall back to direct RDS endpoints. Documented as a
+ * WI-004 follow-up; out of scope for WI-008.
  */
 export function createRdsProxy(
   scope: Construct,

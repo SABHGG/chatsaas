@@ -13,14 +13,23 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-cognito-identity-provider": "^3.1116.0",
+    "@aws-sdk/client-dynamodb": "^3.1116.0",
     "@aws-sdk/client-rds-data": "^3.1116.0",
+    "@aws-sdk/lib-dynamodb": "^3.1116.0",
     "aws-cdk-lib": "^2.266.0",
     "constructs": "^10.3.0",
-    "source-map-support": "^0.5.21"
+    "jose": "^5.9.3",
+    "source-map-support": "^0.5.21",
+    "uuid": "^9.0.1"
   },
   "devDependencies": {
+    "@types/aws-lambda": "^8.10.145",
     "@types/node": "^20.17.6",
+    "@types/uuid": "^9.0.8",
     "aws-cdk": "^2.266.0",
+    "aws-sdk-client-mock": "^4.1.0",
+    "esbuild": "^0.24.0",
     "tsx": "^4.19.2",
     "typescript": "^7.0.2",
     "vitest": "^4.1.11"

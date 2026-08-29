@@ -8,6 +8,7 @@ import { createDatabaseSecret, createRotationLambda } from "./database-secret.js
 import { createAuroraPgVector } from "./aurora-pgvector.js";
 import { createRdsProxy } from "./rds-proxy.js";
 import { createEmbeddingsTableResource } from "./embeddings-table-resource.js";
+import { CognitoUserPoolConstruct } from "./cognito-user-pool.js";
 
 /**
  * The chatSaaS dev stack: Aurora Serverless v2 + pgvector + RDS Proxy + Secrets Manager + the
@@ -66,14 +67,23 @@ export class ChatSaaSStack extends Stack {
     });
 
     // RDS Proxy.
-    const proxy = createRdsProxy(this, {
-      cluster,
-      secret,
-      vpc,
-      proxySecurityGroup: proxySg,
-      clusterSecurityGroup: clusterSg,
-      subnetSelection,
-    });
+    // TODO(WI-004 follow-up): ServerlessCluster.engine is not exposed on this CDK version
+    // (2.266.0), so ProxyTarget.bind throws `CouldNotDetermineEngineForProxyTarget` at synth
+    // time. The proper fix is either to switch to a provisioned `DatabaseCluster` for
+    // proxy compatibility or to wire direct RDS Data API for Lambdas and skip the proxy in
+    // MVP. Out of scope for WI-008; tracked separately.
+    const skipProxy = this.node.tryGetContext("skipProxy") === "true";
+    let proxy: ReturnType<typeof createRdsProxy> | undefined;
+    if (!skipProxy) {
+      proxy = createRdsProxy(this, {
+        cluster,
+        secret,
+        vpc,
+        proxySecurityGroup: proxySg,
+        clusterSecurityGroup: clusterSg,
+        subnetSelection,
+      });
+    }
 
     // Custom resource: embeddings table + HNSW.
     const embeddingsLambda = createEmbeddingsTableResource(this, {
@@ -100,14 +110,16 @@ export class ChatSaaSStack extends Stack {
       value: cluster.clusterArn,
       exportName: `${this.stackName}:ClusterArn`,
     });
-    new CfnOutput(this, "ProxyEndpoint", {
-      value: proxy.endpoint,
-      exportName: `${this.stackName}:ProxyEndpoint`,
-    });
-    new CfnOutput(this, "ProxyArn", {
-      value: proxy.dbProxyArn,
-      exportName: `${this.stackName}:ProxyArn`,
-    });
+    if (proxy) {
+      new CfnOutput(this, "ProxyEndpoint", {
+        value: proxy.endpoint,
+        exportName: `${this.stackName}:ProxyEndpoint`,
+      });
+      new CfnOutput(this, "ProxyArn", {
+        value: proxy.dbProxyArn,
+        exportName: `${this.stackName}:ProxyArn`,
+      });
+    }
     new CfnOutput(this, "SecretArn", {
       value: secret.secretArn,
       exportName: `${this.stackName}:SecretArn`,
@@ -116,9 +128,29 @@ export class ChatSaaSStack extends Stack {
       value: databaseName,
       exportName: `${this.stackName}:DatabaseName`,
     });
-    new CfnOutput(this, "EmbeddingsTable", {
+    new CfnOutput(this, "EmbeddingsTableName", {
       value: "public.embeddings",
-      exportName: `${this.stackName}:EmbeddingsTable`,
+      exportName: `${this.stackName}:EmbeddingsTableName`,
+    });
+
+    // Identity stack (WI-008). Same Stack as the Aurora resources for MVP; a follow-up
+    // WI splits them when the API stack joins. The four CfnOutputs (UserPoolId,
+    // UserPoolClientId, UserPoolDomain, IssuerUrl) are emitted by the construct.
+    new CognitoUserPoolConstruct(this, "Identity", {
+      envName: envName as "dev" | "prod",
+      cognitoDomainPrefix: "chatsaas-dev",
+      callbackUrls: {
+        dev: ["http://localhost:3000/callback"],
+        prod: [],
+      },
+      signOutUrls: {
+        dev: ["http://localhost:3000/"],
+        prod: [],
+      },
+      adminAllowlist: [],
+      mfaMode: "optional",
+      advancedSecurityMode: "audit",
+      region: process.env.CDK_DEFAULT_REGION ?? "us-east-1",
     });
   }
 }

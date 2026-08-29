@@ -3,9 +3,9 @@ type: feature
 id: WI-008
 title: "Cognito User Pool provisioning via CDK"
 knowledge_level: K2
-status: draft
+status: ready
 phase: now
-branch: feature/post-wi-003-rag-infra
+branch: feature/WI-008-cognito-user-pool
 initiative: "RM-001"
 created_at: "2026-08-28"
 source: post-wi-003-decisions

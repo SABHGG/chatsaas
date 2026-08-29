@@ -10,16 +10,19 @@ import { Construct } from "constructs";
  * The Lambda wiring itself is a follow-up WI; this constructs the SGs so the cluster and proxy
  * can already reference them.
  */
-export function createSecurityGroups(scope: Construct, _vpc: Vpc) {
+export function createSecurityGroups(scope: Construct, vpc: Vpc) {
   const lambdaSg = new SecurityGroup(scope, "LambdaSG", {
+    vpc,
     description: "Security group for chatSaaS Lambda functions (outbound to RDS Proxy)",
     allowAllOutbound: false,
   });
   const proxySg = new SecurityGroup(scope, "ProxySG", {
+    vpc,
     description: "Security group for the RDS Proxy (outbound to cluster)",
     allowAllOutbound: false,
   });
   const clusterSg = new SecurityGroup(scope, "ClusterSG", {
+    vpc,
     description: "Security group for the Aurora cluster (inbound 5432 from ProxySG only)",
     allowAllOutbound: false,
   });

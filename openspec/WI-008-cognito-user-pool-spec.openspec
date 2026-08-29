@@ -1,0 +1,280 @@
+# WI-008 Cognito User Pool Specification
+
+## Change
+- **Name**: WI-008-cognito-user-pool
+- **Intent**: Provision the Amazon Cognito User Pool that ADR-001 commits to and that the WI-003 JWT verifier reads from, entirely through CDK, with the `custom:company_id` immutable claim enforced by chain-of-custody invariants (AC-13 + AC-14) that block the post-WI-005 implementation path
+- **Scope**: new `infra/lib/cognito-user-pool.ts` construct, two bundled Lambda triggers, one DynamoDB companies table, vitest assertions
+- **Source**: knowledge/delivery/work-items/draft/WI-008-cognito-user-pool.md
+- **Source ADRs**: 001 (Cognito), 003 (stack pinning), 006 (companies-as-tenant)
+- **Branch**: feature/WI-008-cognito-user-pool (derived from feature/WI-004-cdk-app-bootstrap@e9b9256 + 6d15d65)
+- **Artifact store**: Kaddo
+- **Tests**: vitest + aws-cdk-lib/assertions + lambda handler unit tests
+
+## Why now
+
+WI-003 ships the Cognito JWT verifier (jose 5, `createRemoteJWKSet` against the pool's `/.well-known/jwks.json`) and WI-004 ships the CDK app skeleton. Neither provisions the User Pool itself. Without this WI:
+
+1. The verifier is wired to env vars (`COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_REGION`) that no stack output supplies.
+2. The `custom:company_id` claim on which ADR-006 (companies-as-tenant) depends has no production-grade source.
+3. WI-005 cannot safely write tenant-scoped data because the chain of custody (sub → company_id mapping) is unverified.
+4. WI-006's frontend OAuth code+PKCE flow has no `UserPoolDomain` to redirect to.
+
+WI-008 is the predecessor of WI-005, WI-006 and WI-007. It is the only WI in the post-WI-004 round that materially blocks the others.
+
+## Requirements
+
+### 1. Workspace additions
+
+- `infra/package.json` adds runtime deps: `@aws-sdk/client-cognito-identity-provider@^3.1116.0`, `jose@^5.9.3`, `uuid@^9.0.0`.
+- `infra/package.json` adds dev deps: `@types/uuid@^9.0.0`.
+- `infra/tsconfig.json` extends the root, includes `lib/lambda/**/*` in the compile glob.
+- `infra/lib/lambda/` directory created with three files (see Requirement 4).
+- `infra/test/` directory created with two vitest files (see Requirement 6).
+
+### 2. CognitoUserPoolConstruct (`infra/lib/cognito-user-pool.ts`)
+
+Exports a CDK construct with the following props:
+
+```ts
+export interface CognitoUserPoolConstructProps {
+  readonly envName: 'dev' | 'prod';
+  readonly cognitoDomainPrefix: string;
+  readonly callbackUrls: { dev: string[]; prod: string[] };
+  readonly signOutUrls: { dev: string[]; prod: string[] };
+  readonly adminAllowlist: string[];
+  readonly mfaMode: 'optional' | 'required';
+  readonly advancedSecurityMode: 'off' | 'audit' | 'enforced';
+  readonly region: string;
+}
+```
+
+The construct creates:
+
+- **One `UserPool`** (`chatsaas-{envName}-users`):
+  - `selfSignUpEnabled: true`.
+  - `signInAliases: { email: true }` (email is the username).
+  - `autoVerify: { email: true }`.
+  - `standardAttributes: { email: { required: true, mutable: true } }`.
+  - `customAttributes: { company_id: { type: 'String', mutable: false } }`. **Mutable is hardcoded to `false` to satisfy AC-3 immutability invariant.**
+  - `passwordPolicy: { minLength: 12, requireLowercase: true, requireUppercase: true, requireDigits: true, requireSymbols: true, tempPasswordValidity: Duration.days(3) }`.
+  - `mfa: mfaMode === 'required' ? Mfa.OPTIONAL : Mfa.OFF` (see Note A).
+  - `accountRecovery: AccountRecovery.EMAIL_ONLY`.
+  - `deletionProtection: envName === 'prod' ? DeletionProtection.RETAIN : DeletionProtection.DESTROY`.
+  - `advancedSecurityMode: advancedSecurityMode`.
+  - `lambdaTriggers: { postConfirmation, preTokenGeneration }`.
+
+  > **Note A**: the pool-level MFA flag is `optional` in this WI. The `admin` group enforces TOTP via the pre-token-generation Lambda (AC-9). This keeps the construct usable in dev where operators may not have TOTP enrolled.
+
+- **One `UserPoolClient`** for the Next.js frontend:
+  - `generateSecret: false` (PKCE public client).
+  - `authFlows: { userSrp: true, userPassword: false, custom: false }`.
+  - `oAuth: { flows: { authorizationCodeGrant: true }, scopes: [OPENID, EMAIL, PROFILE, COGNITO_GROUPS], callbackUrls: callbackUrls[envName], logoutUrls: signOutUrls[envName] }`.
+  - `preventUserExistenceErrors: 'ENABLED'`.
+  - `enableTokenRevocation: true`.
+  - `accessTokenValidity: Duration.hours(1)`, `idTokenValidity: Duration.hours(1)`, `refreshTokenValidity: Duration.days(30)`.
+  - `readAttributes` whitelist: client-side readable attributes (`email`, `email_verified`, `name`, `custom:company_id`).
+  - `writeAttributes` whitelist: **`email` only**. `custom:company_id` is **excluded** by design (AC-13). The client cannot set it.
+
+- **One `UserPoolDomain`** with `userPoolDomain: UserPoolDomain.fromCognitoDomain(this, 'Domain', cognitoDomainPrefix)`. No custom domain.
+
+- **Two `UserPoolGroup`s**:
+  - `customer` (precedence 0): default for self-signup.
+  - `admin` (precedence 10): chatSaaS staff, TOTP required.
+
+- **One `Table`** for `companies`:
+  - `partitionKey: { name: 'id', type: AttributeType.STRING }`.
+  - `billingMode: BillingMode.PAY_PER_REQUEST`.
+  - `pointInTimeRecovery: envName === 'prod' ? true : false`.
+  - `removalPolicy: envName === 'prod' ? RemovalPolicy.RETAIN : RemovalPolicy.DESTROY`.
+  - Table name: `chatsaas-${envName}-companies`.
+
+- **Two Lambda functions** (see Requirement 4).
+- **Two CloudWatch alarms** (`Errors >= 1 over 5 min`) on both Lambdas (no SNS action; topic wiring is a follow-up).
+- **Four `CfnOutput`s**:
+  - `UserPoolId` — the User Pool ID.
+  - `UserPoolClientId` — the User Pool Client ID.
+  - `UserPoolDomain` — the full URL: `https://{prefix}.auth.{region}.amazoncognito.com`.
+  - `IssuerUrl` — `https://cognito-idp.{region}.amazonaws.com/{userPoolId}`.
+
+The construct fails synth if `envName === 'prod' && adminAllowlist.length === 0`. The empty allowlist is reserved for dev; in prod it is a hard error.
+
+### 3. apps/functions schema extension
+
+`apps/functions/src/db/schema.ts` gets two additions:
+
+- `Company` type:
+  ```ts
+  export type Company = {
+    id: string;
+    ownerUserId: string;
+    name: string;
+    createdAt: string;
+    updatedAt: string;
+  };
+  ```
+- `TABLES.COMPANIES = 'chatsaas-dev-companies'` (placeholder; final value from CDK envName via stack output at deploy time).
+
+`apps/functions` handler factories in WI-002 are NOT modified. Only the schema registry grows.
+
+### 4. Lambda handlers (`infra/lib/lambda/`)
+
+#### 4.1 `post-confirmation.ts`
+
+- Trigger source: `PostConfirmation_ConfirmSignUp`.
+- Reads `event.request.userAttributes.email` and `event.request.userAttributes.sub`.
+- Generates a UUID v4 as `companyId`.
+- Writes a `Company` record to DynamoDB via `RDSDataApi PutItem` (the Aurora Data API; reusing the WI-004 secret and proxy) — **OR** via `DynamoDBDocumentClient PutItem` if the table is in DynamoDB. **Decision (this WI)**: DynamoDB. Aurora is for embeddings (WI-004). Mixing tenant metadata into Aurora creates a second connection pool for one extra write. DynamoDB is the canonical home for the `companies` table per the original spec. (See §5 stack composition.)
+  - **CORRECTION**: the original spec mentions RDS Data API. We use DynamoDB.
+- Calls `cognito-idp AdminUpdateUserAttributes` to set `custom:company_id = companyId`.
+- Idempotency: `PutItem` with `ConditionExpression: 'attribute_not_exists(id)'`. If the user re-confirms, the conditional write fails and the Lambda exits without writing again.
+- IAM permissions: `dynamodb:PutItem` on the companies table ARN, `cognito-idp:AdminUpdateUserAttributes` on the user pool ARN.
+
+#### 4.2 `pre-token-generation.ts`
+
+- Trigger sources: `TokenGeneration_HostedAuth`, `TokenGeneration_Authentication`.
+- Reads `event.request.userAttributes['custom:company_id']` and the user's `cognito:groups` (already in the event).
+- Copies both into `event.response.claimsOverride.details`.
+- For `admin` group: if no TOTP MFA setting on the user, throw `MFA required for admin` so Cognito returns no token.
+- **No AWS API calls.** No `DynamoDBClient`, no `CognitoIdentityProviderClient`. This is a pure function over the event payload.
+- IAM permissions: **zero statements**.
+
+#### 4.3 `companies-table.ts`
+
+Re-exports the `companies` table name and ARNs for use in IAM policy builders. Implementation: a typed const object with the envName-aware name pattern. No construct here — the Table is created inside `cognito-user-pool.ts`.
+
+### 5. Stack composition
+
+`infra/lib/chat-saas-stack.ts` (extended in this WI) instantiates `CognitoUserPoolConstruct` with dev defaults:
+
+```ts
+new CognitoUserPoolConstruct(this, 'Identity', {
+  envName: 'dev',
+  cognitoDomainPrefix: 'chatsaas-dev',
+  callbackUrls: { dev: ['http://localhost:3000/callback'], prod: [] },
+  signOutUrls: { dev: ['http://localhost:3000/'], prod: [] },
+  adminAllowlist: [],
+  mfaMode: 'optional',
+  advancedSecurityMode: 'audit',
+  region: process.env.CDK_DEFAULT_REGION ?? 'us-east-1',
+});
+```
+
+The Aurora stack (WI-004) and the identity stack share the same `ChatSaaSStack` in this round. A follow-up WI splits them when the API stack joins.
+
+### 6. Vitest assertions
+
+`infra/test/cognito-user-pool.test.ts` asserts:
+
+- Exactly one `AWS::Cognito::UserPool`, one `AWS::Cognito::UserPoolClient`, one `AWS::Cognito::UserPoolDomain`, two `AWS::Cognito::UserPoolGroup` resources.
+- The UserPool's `PasswordPolicy.MinimumLength` is `12` and all four character class flags are `true`.
+- The UserPool has exactly one custom attribute: `custom:company_id`, with `Mutable: false` and `StringAttributeConstraints.MinLength: "1"`.
+- The UserPoolClient has `GenerateSecret: false`, `AllowedOAuthFlows` is `['code']`, `CallbackURLs` matches the dev list, `ExplicitAuthFlows` does NOT include `ALLOW_USER_PASSWORD_AUTH` or `ALLOW_CUSTOM_AUTH`.
+- The UserPoolClient's `WriteAttributes` whitelist does NOT include `custom:company_id`. **AC-13 chain-of-custody invariant.**
+- Exactly one IAM role has `cognito-idp:AdminUpdateUserAttributes` in its policy statements, and that role is the post-confirmation Lambda's execution role. **AC-14 chain-of-custody invariant.**
+- The UserPool's `DeletionProtection` is `RETAIN` for prod and `DESTROY` for dev.
+- The post-confirmation Lambda has `Handler: index.handler`, `Runtime: nodejs20.x`, and exactly two `dynamodb:PutItem` + `cognito-idp:AdminUpdateUserAttributes` IAM statements.
+- The pre-token-generation Lambda has `Handler: index.handler`, `Runtime: nodejs20.x`, and **zero** IAM statements.
+- Two CloudWatch alarms exist, one per Lambda, on `Errors >= 1 over 5 min`.
+- Four `AWS::CloudFormation::Output`s with the expected `ExportName` and value patterns.
+- The DynamoDB companies table is `PAY_PER_REQUEST` and named `chatsaas-dev-companies`.
+- A `cdk synth` snapshot of the full template is committed.
+
+`infra/test/lambda-handlers.test.ts` asserts:
+
+- `post-confirmation` happy path: given a stubbed `event` with `email` and `sub`, the handler calls `PutItem` with `ConditionExpression: 'attribute_not_exists(id)'` and `AdminUpdateUserAttributes` with the new `custom:company_id`.
+- `post-confirmation` idempotency: when `PutItem` returns `ConditionalCheckFailedException`, the handler exits without calling `AdminUpdateUserAttributes` again.
+- `pre-token-generation` customer user: copies `custom:company_id` and `cognito:groups: ['customer']` into `event.response.claimsOverride.details`.
+- `pre-token-generation` admin user with TOTP: copies `custom:company_id` and `cognito:groups: ['admin']`, no throw.
+- `pre-token-generation` admin user without TOTP: throws.
+
+No real AWS calls. Both AWS SDK clients are mocked with `aws-sdk-client-mock`.
+
+## Scenarios
+
+### Developer first deploy (dev account)
+
+1. Developer runs `cdk bootstrap` on the dev account.
+2. Developer sets `CDK_DEFAULT_ACCOUNT` and `CDK_DEFAULT_REGION` env vars.
+3. `cd infra && pnpm synth` produces `cdk.out/ChatSaaSStack.template.json` containing both Aurora (WI-004) and Cognito (this WI) resources.
+4. `pnpm -F infra test` runs the cdk assertions and handler unit tests, all green.
+5. `cdk deploy` creates the User Pool, the Client, the Domain, the Groups, the two Lambdas, the DynamoDB table, and the Aurora cluster from WI-004. Both Lambdas are wired to the User Pool via `lambdaTriggers`.
+6. After deploy, a developer can `aws cognito-idp describe-user-pool --user-pool-id <id>` and verify `custom:company_id` is `Mutable: false` and the WriteAttributes whitelist excludes it.
+
+### End-user sign-up
+
+1. User opens `https://chatsaas-dev.auth.us-east-1.amazoncognito.com/signup`.
+2. Submits email + password + (optionally) company name.
+3. Cognito sends a verification code to the email.
+4. User submits the code → Cognito invokes the `post-confirmation` trigger.
+5. The Lambda writes a Company record to DynamoDB and sets `custom:company_id` on the user.
+6. Cognito invokes the `pre-token-generation` trigger.
+7. The Lambda copies `custom:company_id` and `cognito:groups` into the JWT.
+8. The hosted UI redirects to `http://localhost:3000/callback?code=...` (dev) or `https://app.chatsaas.com/callback?code=...` (prod).
+9. The Next.js frontend exchanges the code for tokens via PKCE and stores the ID token.
+10. The next API call sends the ID token; the WI-003 verifier reads `sub` and `custom:company_id` and the request proceeds.
+
+### Chain-of-custody failure mode (proves AC-13 + AC-14 work)
+
+1. Attacker tampers with the hosted-UI form to inject `custom:company_id` in the SignUp payload.
+2. The form rejects the submission (the `custom:company_id` field is not in the hosted UI; the form does not render it).
+3. If the attacker manages to send the SignUp via raw API: Cognito's `writeAttributes` whitelist on the User Pool Client excludes `custom:company_id`; the attribute is dropped at the API gateway.
+4. The user signs up with their own email only. The post-confirmation Lambda runs and sets `custom:company_id` from the server side.
+5. The JWT the user receives contains the server-set `custom:company_id`, not anything the client tried to inject.
+
+### Admin promotion (dev)
+
+1. Dev sets the CDK context `cognitoAdminAllowlist` to a list of emails.
+2. `cdk synth` emits the allowlist into the pre-token-generation Lambda's bundled code.
+3. A user on the allowlist signs up.
+4. The pre-token-generation Lambda sees the email in the allowlist and the absence of `cognito:groups` in the user attributes, then calls `AdminAddUserToGroup` for `admin` and includes the group in the JWT.
+5. The user is now a chatSaaS staff user with admin capabilities. (In prod the allowlist is sourced from SSM, not bundled.)
+
+## Out of scope
+
+- Custom Cognito domain (`auth.chatsaas.com`). This WI uses a Cognito-issued prefix domain. WI-009 (suggested) provisions ACM + CloudFront + UserPoolDomain with the custom domain.
+- Social identity providers (Google, Apple, Facebook, SAML/OIDC). The pool supports federated IdP; this WI does not wire any. A follow-up WI adds per-IdP.
+- MFA enforcement for ALL users. This WI makes MFA `optional` for `customer` users and `required` (via the pre-token-generation guard) for `admin`. A follow-up WI can flip the pool to `ON` and remove the per-group guard.
+- Logo and CSS customization of the hosted UI. The default Cognito logo is used; the chatSaaS logo upload is a follow-up WI.
+- The Next.js frontend wiring (apps/web/) that starts the OAuth code + PKCE flow against `UserPoolDomain`. This WI emits the values; the wiring is WI-006 / WI-007.
+- The API stack env-var wiring (consuming `UserPoolId`, `ClientId`, `Region` in the Fastify server). This WI emits the values; a follow-up WI plumbs them into the API stack outputs.
+- Local dev sign-up without a real AWS account. Local dev uses `AUTH_DISABLED=true` per WI-003; the Cognito pool is exercised in the deployed dev stack only.
+- Account linking, remember-device policy, threat protection, bot detection beyond Advanced Security audit mode.
+- Per-attribute IAM policies on the User Pool. A follow-up WI adds `cognito-idp:AdminUpdateUserAttributes` denial policies for non-admin principals on `custom:company_id`. (AC-14 already enforces this from the positive side; the negative side is hardening.)
+
+## Risks
+
+1. **Pre-token-generation Lambda failure breaks all auth.** Pure function, but a deploy-time typo or import error is still possible. *Mitigation:* CloudWatch alarm + unit test that the handler compiles and runs against a real event payload. The vitest case asserts `IAM statements: 0`, which catches accidental SDK imports.
+2. **Post-confirmation Lambda race with first login.** Mitigated by the order: post-confirmation sets `custom:company_id` BEFORE returning; pre-token-generation reads it from user attributes (not DynamoDB). The first authenticated API call that hits DynamoDB lands after the post-confirmation Lambda has completed.
+3. **Admin allowlist is bundled into the Lambda code.** This is fine for dev (visible in synth) but the prod path must source from SSM. *Mitigation:* this WI implements the dev path (hardcoded list) and a follow-up WI implements the prod path (SSM read at synth time). The construct's `adminAllowlist` prop accepts both: a `string[]` for hardcoded dev or a `SecretValue` reference for prod.
+4. **Custom attribute mutability mistake.** A future operator or a refactor could flip `mutable: true` on `custom:company_id`. *Mitigation:* the vitest AC-3 assertion explicitly checks `mutable: false`. A follow-up WI adds an SCP that denies `AdminUpdateUserAttributes` on the attribute for non-admin principals.
+5. **Region lock between Cognito and the API.** The User Pool's issuer URL is region-specific. *Mitigation:* the construct reads the same `region` CDK context as WI-004 and emits it as the `IssuerUrl` output. The construct fails synth if `region` is empty.
+6. **Custom domain deferred.** This WI uses a Cognito prefix domain. The URL changes if the User Pool is deleted and recreated. *Mitigation:* for dev, the URL is treated as ephemeral. For prod, WI-009 provisions a custom domain.
+7. **Lambda bundle drift.** The two Lambdas in this WI are the first non-CDK Lambda code in the repo. *Mitigation:* jose 5.9.3 and `@aws-sdk/client-cognito-identity-provider` 3.1116.0 are pinned via esbuild externals resolution. The pre-token-generation Lambda has zero AWS SDK calls (pure function).
+
+## Validation
+
+- `pnpm install` at the root resolves the new deps.
+- `pnpm -F infra synth` is clean (no warnings about unresolved tokens, no deprecated props).
+- `pnpm -F infra test` is green (both `cognito-user-pool.test.ts` and `lambda-handlers.test.ts`).
+- `pnpm type-check` at the root is clean.
+- `pnpm lint` at the root has 0 errors on `infra/`.
+- `kaddo guard` returns 0 findings.
+- `kaddo questions` returns 0 new blocking (5 already resolved in this WI).
+- The AC-13 + AC-14 chain-of-custody invariants are testable in vitest. Both are run as part of `pnpm -F infra test`.
+
+## Cross-references
+
+- `knowledge/delivery/work-items/draft/WI-008-cognito-user-pool.md` (canonical source)
+- `knowledge/tech/decisions/001-amazon-cognito-for-user-authentication.md` (ADR-001)
+- `knowledge/tech/decisions/003-technology-stack-selection.md` (ADR-003)
+- `knowledge/tech/decisions/006-data-partitioning-strategy-for-tenant-isolation.md` (ADR-006)
+- `apps/functions/src/auth/verifyCognitoJwt.ts` (WI-003 verifier; env vars sourced from this WI's CfnOutputs)
+- `tasks/WI-008-cognito-user-pool-tasks.yml` (canonical task list)
+- `knowledge/tech/discovery/decision-candidates.md` (DC-005-1 closed via AC-13 + AC-14; DCs 008-1, 008-2 closed in the WI draft)
+
+## Next WIs
+
+- **WI-005** (planned) — Bedrock Knowledge Base wiring + ingest pipeline. Depends on WI-008 because the ingest pipeline's per-document tenant scoping uses `custom:company_id` from the user's JWT. AC-13 + AC-14 close the chain-of-custody risk.
+- **WI-006** (planned) — apps/web/ Next.js frontend (login + dashboard). Depends on WI-008 because the frontend's hosted-UI OAuth code + PKCE flow consumes `UserPoolDomain`, `UserPoolClientId`, and the callback URLs from this WI's stack outputs.
+- **WI-007** (planned) — API stack wiring (Fastify + Lambda + API Gateway HTTP API) that consumes the Cognito stack outputs as env vars (`COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_REGION`). Depends on WI-008 because the Fastify server bootstrap (WI-003) reads these env vars to construct the JWKS URL.
+- **WI-009** (suggested, future) — Custom Cognito domain (`auth.chatsaas.com`) with ACM + CloudFront + hosted UI customization.
