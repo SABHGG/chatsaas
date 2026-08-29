@@ -156,6 +156,7 @@ describe('documentsUpload', () => {
       headers: {
         'x-filename': 'test.pdf',
         'x-mime-type': 'application/pdf',
+            'content-type': 'application/pdf',
       },
       payload: PDF_MAGIC,
     })
@@ -181,6 +182,7 @@ describe('documentsUpload', () => {
       headers: {
         'x-filename': 'test.pdf',
         'x-mime-type': 'application/pdf',
+            'content-type': 'application/pdf',
       },
       payload: PDF_MAGIC,
     })
