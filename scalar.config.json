@@ -1,0 +1,32 @@
+{
+  "$schema": "https://registry.scalar.com/@scalar/schemas/config",
+  "scalar": "2.0.0",
+  "info": {
+    "title": "chatSaaS",
+    "description": "Public document-grounded chatbot platform — backend API references and project documentation."
+  },
+  "navigation": {
+    "tabs": [
+      { "title": "WI-002 Backend API", "to": "/api/backend", "icon": "phosphor/regular/plug" },
+      { "title": "WI-006 Public Chat API", "to": "/api/public-chat", "icon": "phosphor/regular/chat-circle-dots" }
+    ],
+    "routes": {
+      "/": {
+        "type": "page",
+        "title": "Introduction",
+        "filepath": "README.md",
+        "showInSidebar": true
+      },
+      "/api/backend": {
+        "type": "openapi",
+        "title": "WI-002 Backend Endpoints API",
+        "filepath": "openspec/WI-002-backend-endpoints-openapi.yaml"
+      },
+      "/api/public-chat": {
+        "type": "openapi",
+        "title": "WI-006 Retrieval + Chat Handler API",
+        "filepath": "openspec/WI-006-retrieval-chat-openapi.yaml"
+      }
+    }
+  }
+}
