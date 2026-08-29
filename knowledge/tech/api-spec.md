@@ -167,6 +167,29 @@ These endpoints are accessed via the public URL or iframe embed (e.g., `https://
   }
   ```
 
+  - **Send a message to a published chatbot (WI-006)**
+    - `POST /api/public/chat/:chatbotId/message` (anonymous, no JWT)
+    - Body:
+      ```json
+      { "message": "string (1-2000 chars)", "conversation_id": "uuid|null" }
+      ```
+      - Strict body: no client-supplied `history` or tenant fields (R-1/R-6). Tenant scope is always resolved server-side from the chatbot row.
+      - `conversation_id` is honored only when the conversation belongs to the same chatbot + company; otherwise a fresh conversation starts.
+    - Response (200):
+      ```json
+      {
+        "data": {
+          "answer": "string",
+          "conversation_id": "uuid",
+          "sources": [{ "id": "string", "content": "string", "score": number }]
+        }
+      }
+      ```
+    - Headers: `x-credit-alert: 80%` when monthly usage crosses the 80% threshold (ADR-005).
+    - Errors: 400 validation (strict), 402 monthly limit exhausted / prepaid credits exhausted (hard block, no Bedrock call), 404 chatbot not found or not published (deliberately not 403), 429 rate limit, 500 Bedrock/DB failure.
+    - Zero retrieval rows → configured fallback answer (`CHAT_FALLBACK_ANSWER`), never an ungrounded completion (AC 9).
+    - Latency budget: p50 < 3 s, p95 < 8 s. Streaming (SSE) out of scope.
+
 ### Generate iframe embed code
 
 - `GET /api/public/chatbots/:chatbotId/iframe`
