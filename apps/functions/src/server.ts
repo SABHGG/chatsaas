@@ -14,6 +14,7 @@ import { chatPublicPlugin } from './api/chatPublic'
 import { documentsUploadPlugin } from './api/documentsUpload'
 import { documentsListPlugin } from './api/documentsList'
 import { documentGetPlugin } from './api/documentGet'
+import { chatPublicMessagePlugin, chatRouteEnvFromProcess } from './api/chatPublicMessage'
 
 /**
  * Public surface — these routes skip the Cognito JWT verification. Everything
@@ -249,6 +250,21 @@ export async function createServer(
   await fastify.register(chatPublicPlugin, {
     prefix: '/api/chat/public',
   })
+
+  // WI-006 public retrieval+chat surface. Anonymous (no JWT preHook); the
+  // chatbot row is the tenant-scope source. Mounted only when the full env
+  // set is present so legacy tests keep running without RDS/Bedrock.
+  const chatRouteEnv = chatRouteEnvFromProcess()
+  if (chatRouteEnv) {
+    await fastify.register(chatPublicMessagePlugin, {
+      prefix: '/api/public/chat',
+      env: chatRouteEnv,
+    })
+  } else {
+    fastify.log.warn(
+      'WI-006 public chat route disabled: missing one of CHATBOTS_TABLE_NAME, CONVERSATIONS_TABLE_NAME, MESSAGES_TABLE_NAME, SUBSCRIPTIONS_TABLE_NAME, CREDITS_TABLE_NAME, RDS_CLUSTER_ARN, RDS_SECRET_ARN, RDS_DATABASE, BEDROCK_EMBED_MODEL_ID, CHAT_MODEL_ID',
+    )
+  }
 
   // Light health endpoint. Useful in Lambda container startup probes too.
   fastify.get('/healthz', async () => ({ status: 'ok' }))

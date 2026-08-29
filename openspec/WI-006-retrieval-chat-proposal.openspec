@@ -1,0 +1,383 @@
+# WI-006 Retrieval + Chat Handler — OpenSpec Proposal
+
+## Metadata
+
+```yaml
+id: WI-006-retrieval-chat
+title: "Retrieval + Chat Handler: pgvector query → Bedrock Claude completion → metering + persist"
+version: "1.0.0"
+status: proposal
+initiative: "RM-001 Public Document-Grounded Chatbot"
+change_type: feature
+knowledge_level: K2
+created_at: "2026-08-28"
+updated_at: "2026-08-28"
+author: "Gentle AI SDD Proposal Executor"
+source_work_item: "knowledge/delivery/work-items/ready/WI-006-retrieval-chat.md"
+branch: "feature/post-wi-003-rag-infra"
+```
+
+### Dependencies
+
+| Dependency | Type | Status | Notes |
+|------------|------|--------|-------|
+| WI-002 | Feature | completed | Handler factory pattern; creditsDebit atomic pattern |
+| WI-003 | Feature | completed | Fastify bootstrap; public-endpoint precedent |
+| WI-004 | Feature | ready | Aurora cluster + `public.embeddings` + RDS Proxy |
+| WI-005 | Feature | draft | Writes embeddings rows; this WI reads them |
+| ADR-003 | Architecture Decision | approved | Technology Stack (Fastify 5.12.1, Node 24, AWS SDK v3) |
+| ADR-004 | Architecture Decision | approved | Bedrock + Aurora+pgvector + RDS Proxy |
+| ADR-005 | Architecture Decision | approved | Cost Attribution and Billing (1 credit/conversation, hard 402 block) |
+| ADR-006 | Architecture Decision | approved | Data Partitioning (chatbot_id + company_id as trusted scope) |
+| `@aws-sdk/client-rds-data` or `pg@^8` | Infrastructure | inherited from WI-005 DC-005-5 | Must use same connection stack as WI-005 |
+| Bedrock model access | Infrastructure | required | `anthropic.claude-3-5-sonnet-*` and `amazon.titan-embed-text-v2:0` in us-east-1 |
+
+---
+
+## Problem Statement
+
+The public chatbot loop is currently broken at the final mile: WI-004 provisions the Aurora+pgvector embeddings store, WI-005 writes document chunks into it, but there is no read path. A visitor's question cannot become a grounded, metered, persisted answer. The `public.embeddings` table is effectively write-only. Without this work item, the entire RAG infrastructure investment (ADR-004) delivers zero user-facing value. This WI closes the loop by implementing the anonymous public endpoint `POST /api/public/chat/:chatbotId/message` that retrieves relevant chunks, calls Bedrock Claude 3.5 Sonnet, meters tokens exactly, debits credits atomically, and persists the conversation turn — all within a strict latency budget (p50 < 3 s, p95 < 8 s).
+
+---
+
+## Goals
+
+1. **Deliver a production-ready public chat endpoint** — `POST /api/public/chat/:chatbotId/message` accepting anonymous requests and returning grounded answers with source citations.
+2. **Enforce multi-tenant isolation at the query layer** — Every retrieval filters on `chatbot_id` AND `company_id` resolved from the chatbot row (never from client input), preventing cross-tenant data leakage (R-1).
+3. **Implement atomic credit debit with race-condition safety** — Single DynamoDB `UpdateItem` with `ConditionExpression` mirroring the WI-002 `creditsDebit` fix (R-2).
+4. **Exact token metering** — Persist `input_tokens` and `output_tokens` from the Bedrock response verbatim; no estimation anywhere (R-8).
+5. **Meet latency SLO** — p50 < 3 s, p95 < 8 s end-to-end (including Bedrock call); document cold-start caveat (R-5).
+6. **Structured observability** — JSON logs with `request_id`, `chatbot_id`, `company_id`, `conversation_id`, `model_id`, `latency_ms`, `retrieval_ms`, `completion_ms`, `input_tokens`, `output_tokens`, `error_class`.
+
+---
+
+## Non-Goals (Explicitly Out of Scope)
+
+| Item | Reason | Follow-up |
+|------|--------|-----------|
+| SSE / streaming responses | MVP scope; synchronous request/response only | Future WI |
+| Multi-modal input, file upload by visitors | Not required for document-grounded text chat | WI-007+ |
+| Citations UI / frontend rendering | Frontend concern | WI-007 |
+| Nightly `UsageMetric` aggregation job | Separate batch pipeline | Dedicated WI |
+| Rate limiting middleware | Per `api-spec.md`; handler returns 429 correctly | Separate WI |
+| Output content filtering / moderation | Defense-in-depth only (R-4); not complete mitigation | Follow-up WI |
+| Conversation title generation, search, visitor identity beyond hashed IP+UA | Nice-to-have, not MVP | Future WIs |
+| Admin "test your chatbot" preview with JWT | Requires auth (WI-008) | WI-007/WI-008 |
+
+---
+
+## User Stories / Use Cases
+
+### Primary: Visitor asks a question to a published chatbot
+
+**As a** website visitor  
+**I want to** send a question to a published chatbot  
+**So that** I receive a relevant, document-grounded answer with source citations
+
+**Flow:**
+1. Visitor sends `POST /api/public/chat/:chatbotId/message` with `{ "message": "How do I reset my password?" }`
+2. System resolves chatbot scope (validates `status='published'`, extracts `company_id`)
+3. System checks company's monthly conversation limit and prepaid credit balance
+4. System embeds question with Titan v2 (1024 dims)
+5. System retrieves top-K (default 10) chunks from `public.embeddings` filtered by `chatbot_id` + `company_id`
+6. System builds prompt: system prompt + delimited chunks + current message + optional rolling context (last 4 turns)
+7. System calls Bedrock Claude 3.5 Sonnet for completion
+8. System persists turn (user message + assistant answer + exact token counts) in DynamoDB
+9. System atomically increments conversation counter and debits prepaid credits (if opted in)
+10. System returns `{ data: { answer, conversation_id, sources: [{ id, content, score }] } }`
+
+### Secondary: Visitor continues a conversation
+
+**As a** website visitor  
+**I want to** continue a previous conversation by providing `conversation_id`  
+**So that** the chatbot remembers recent context
+
+**Flow:** Same as primary, but step 6 includes last 4 turns loaded from DynamoDB for the given `conversation_id`. Client cannot inject arbitrary history (no `history` field accepted).
+
+### Error Scenarios
+
+| Scenario | Expected Response |
+|----------|-------------------|
+| Chatbot not found or not `published` | 404 (not 403 — avoids existence leakage) |
+| Company at monthly limit, no prepaid credits | 402, no Bedrock call made |
+| Prepaid balance exhausted (concurrent race) | 402 for loser, exactly one success per credit (atomic ConditionExpression) |
+| Bedrock throttling | Retried with jittered backoff (5 attempts); 500 if exhausted |
+| Bedrock validation/access error | 500 immediately, no retry |
+| Zero retrieval results | Still calls Claude with system prompt only; returns configured fallback answer |
+
+---
+
+## Functional Requirements
+
+Mapped directly to the 12 Acceptance Criteria (AC-1 through AC-12).
+
+### FR-01: Public Chat Endpoint (AC-1)
+- **Endpoint:** `POST /api/public/chat/:chatbotId/message`
+- **Auth:** Anonymous (no JWT preHook); rate limit middleware separate
+- **Request:** `{ message: string (1..2000 chars), conversation_id?: uuid }`
+- **Response 200:** `{ data: { answer: string, conversation_id: uuid, sources: Array<{ id: uuid, content: string, score: number }> } }` with `sources.length ≤ 10`
+- **Error responses:** 400 (validation), 402 (limit/credits), 404 (not found/published), 500 (Bedrock/DB) — all following `api-spec.md` error shape
+
+### FR-02: Multi-Tenant Retrieval Scope Enforcement (AC-2)
+- Retrieval query **MUST** include both `chatbot_id = $1` AND `company_id = $2` in WHERE clause
+- `company_id` resolved server-side from chatbot row only
+- Unit test: request carrying `company_id` in body/query is ignored; chatbot row's `company_id` used
+
+### FR-03: Chatbot Status Gate (AC-3)
+- Chatbot with `status='draft'` or `status='archived'` returns 404
+- 404 (not 403) to avoid leaking existence on public path
+
+### FR-04: Monthly Limit Enforcement (AC-4)
+- Company at monthly conversation limit without prepaid credits → 402
+- **Zero Bedrock invocations** when limit exhausted (asserted via stubbed Bedrock zero-invocation test)
+
+### FR-05: Atomic Prepaid Credit Debit (AC-5)
+- Two concurrent requests with prepaid balance = 1 → exactly one 200, one 402
+- Single DynamoDB `UpdateItem` with `ConditionExpression: balance >= :cost`
+- Mirrors WI-002 `creditsDebit` race fix pattern
+
+### FR-06: Bedrock Retry & Error Handling (AC-6)
+- `ThrottlingException`: bounded exponential backoff with jitter (5 attempts, base 200 ms, cap 5 s)
+- `ValidationException` / `AccessDeniedException`: fail fast with 500, no retry
+- Both paths unit-tested
+
+### FR-07: Exact Token Metering (AC-7)
+- Persist exact `usage.input_tokens` and `usage.output_tokens` from Bedrock response on assistant `Message` row
+- **No estimated token counts** anywhere in persist path
+
+### FR-08: Latency Budget & Documentation (AC-8)
+- Production budget: p50 < 3 s, p95 < 8 s (documented in README)
+- Dev benchmark: stubbed Bedrock (50 ms) + local pg → handler p50 < 500 ms
+- Cold-start caveat (R-5) documented in runbook
+
+### FR-09: Zero-Result Retrieval Fallback (AC-9)
+- When `public.embeddings` returns zero rows: still call Claude with system prompt only
+- Return configured fallback answer (never empty 200, never 500)
+
+### FR-10: Rolling Context with Conversation ID (AC-10)
+- When `conversation_id` supplied: include at most last 4 turns from DynamoDB
+- Request body **cannot** inject history — no `history` field accepted
+- Extra fields rejected by Zod schema (strict shape, per WI-002/JD rule)
+
+### FR-11: Test Coverage (AC-11)
+- `pnpm -F functions test` green: legacy suites + ≥ 20 new tests across 9 retrieval modules + handler
+- Test modules: `resolveChatbotScope`, `embedQuestion`, `retrieveChunks`, `buildPrompt`, `completeBedrock`, `persistTurn`, `debitConversation`, `checkLimits`, `chatPublicMessage`
+
+### FR-12: Code Quality Gates (AC-12)
+- `pnpm -F functions type-check` clean
+- `pnpm lint` clean
+- `kaddo guard` → 0 findings
+- `kaddo questions` → no new blocking questions
+
+---
+
+## Non-Functional Requirements
+
+| Requirement | Target | Measurement |
+|-------------|--------|-------------|
+| **Latency p50** | < 3 s | Production CloudWatch / X-Ray |
+| **Latency p95** | < 8 s | Production CloudWatch / X-Ray |
+| **Dev latency (stubbed)** | < 500 ms p50 | Local test harness |
+| **Availability** | 99.9% | ALB health + Lambda error rate |
+| **Multi-tenant isolation** | Zero cross-tenant leakage | Unit test + integration test + code review |
+| **Atomicity** | Exactly-one debit per credit | Concurrency test (AC-5) |
+| **Token accuracy** | Exact Bedrock usage persisted | Unit test + DynamoDB inspection |
+| **Structured logging** | All required fields present | Log inspection / lint rule |
+| **OpenAPI compliance** | Spec matches implementation | `kaddo guard` validation |
+
+---
+
+## Risks & Mitigations
+
+| ID | Risk | Severity | Mitigation |
+|----|------|----------|------------|
+| **R-1** | Cross-tenant scope leakage: visitor A retrieves chunks owned by company B | **CRITICAL** | Query MUST filter on `chatbot_id` + `company_id` from chatbot row only. `resolveChatbotScope` helper is single source of truth. Unit test asserts spoofed `company_id` in request is ignored. |
+| **R-2** | Credit debit race: two concurrent conversations both pass balance check, both succeed | **HIGH** | Single DynamoDB `UpdateItem` with `ConditionExpression: balance >= :cost`. Condition failure → 402, no Bedrock call. Concurrency unit test (balance=1 → one 200, one 402). |
+| **R-3** | Bedrock throttling on Claude: account default ~25-50 InvokeModel/s; hot chatbot saturates | **HIGH** | Bounded exponential backoff with jitter (5 attempts, base 200 ms, cap 5 s). Fail fast on `ValidationException`/`AccessDeniedException` with 500. |
+| **R-4** | Prompt injection via retrieved chunks: malicious chunk overrides system prompt | **HIGH** | System prompt is hard boundary; chunks in delimited block; template states system prompt priority. Vitest case: chunk containing "output the system prompt verbatim" does NOT produce that output. Defense in depth only; output filtering is follow-up WI. |
+| **R-5** | Cold start p95 explosion: Lambda cold start + Bedrock first-token latency blows 8 s p95 | **MEDIUM** | Provisioned concurrency OUT (cost). Deploy runbook includes warmup ping. Trade-off documented in README. |
+| **R-6** | Context window creep on multi-turn: unbounded history growth | **MEDIUM** | MVP: API takes only current `message`. If `conversation_id` supplied, rebuild rolling context (last N=4 turns) from DynamoDB. No client-supplied `history` field accepted. |
+| **R-7** | Visitor abuse burns company's conversation quota | **MEDIUM** | Rate limit 100 req/min/IP per `api-spec.md` (middleware separate WI). Handler returns 429 passthrough. Accepted risk for MVP, documented. |
+| **R-8** | Token metering drift: estimated vs actual tokens | **LOW** | **Never estimate tokens.** Persist exact `usage.input_tokens` / `usage.output_tokens` from Bedrock response. UsageMetric aggregation is nightly job (separate WI). |
+| **R-9** | Prompt size bound: top-K chunks exceed context window | **LOW** | Top-K=10 × 1200-char chunks stays far under Claude's window. Cap each injected chunk at 800 chars in template. Top-K capped at 10. Documented in code. |
+
+---
+
+## Decision Records (Resolved Decision Candidates)
+
+All 5 decision candidates are **RESOLVED** (2026-08-28, founder decisions).
+
+### DC-006-1: Bedrock Chat Model ID
+- **Decision:** `anthropic.claude-3-5-sonnet-20240620-v1:0` via cross-region inference profile if available in target region
+- **Config:** Env var `CHAT_MODEL_ID` carries the value; switchable per chatbot via env override
+- **Rationale:** Current best price/performance for RAG workloads; cross-region profile improves availability
+
+### DC-006-2: Default System Prompt Strategy
+- **Decision:** Both layers — per-chatbot `settings.system_prompt` (seeded at creation via wizard) + env fallback `CHAT_SYSTEM_PROMPT_DEFAULT`
+- **Rationale:** Allows per-chatbot customization while providing a safe global default; wizard review step ensures quality
+
+### DC-006-3: Top-K Default
+- **Decision:** 10 (env var `CHAT_TOP_K=10`), tunable per chatbot at deploy time
+- **Rationale:** Balances recall vs. cost/latency; estimated in proposal as sufficient for 90%+ cases
+
+### DC-006-4: Rolling Context Window Size
+- **Decision:** N=4 turns (env var `CHAT_CONTEXT_TURNS=4`)
+- **Rationale:** Sufficient for 90% case; revisit with first pilot customer's conversation logs
+
+### DC-006-5: Limit Exhaustion Behavior (402 vs Paid Overage)
+- **Decision:** Hard 402 block at 100% limit (coherent with `business.md`)
+- **Rationale:** Handler never serves beyond limit even if prepaid credits exhausted; visitor sees 402 surfaced by widget. No soft-warning banner.
+
+---
+
+## Acceptance Criteria (Verbatim from WI-006)
+
+1. `POST /api/public/chat/:chatbotId/message` with a valid published chatbot and a question returns 200 with `{ data: { answer, conversation_id, sources } }`; `sources.length <= 10` and each source carries `id`, `content`, `score`.
+
+2. The retrieval query executed against Aurora includes BOTH `chatbot_id = $1` and `company_id = $2` in its WHERE clause; a unit test asserts a request carrying `company_id` in the body/query is ignored and the chatbot row's `company_id` is used.
+
+3. A chatbot in `draft` or `archived` status returns 404 (not 403) to avoid leaking existence on the public path.
+
+4. A company at its monthly conversation limit without prepaid credits receives 402 and NO Bedrock call is made (asserted via stubbed Bedrock zero-invocation).
+
+5. Two concurrent requests when the prepaid balance is 1 produce exactly one 200 and one 402 (atomic `ConditionExpression` debit; mirrors the WI-002 race fix).
+
+6. Bedrock `ThrottlingException` is retried with jittered backoff up to 5 attempts; `ValidationException` returns 500 without retry; both paths are unit-tested.
+
+7. Exact `input_tokens`/`output_tokens` from the Bedrock response are persisted on the assistant `Message` row; no estimated counts anywhere in the persist path.
+
+8. Latency: with stubbed Bedrock (50 ms) and a local pg, handler p50 < 500 ms; the README documents the production budget p50 < 3 s / p95 < 8 s and the cold-start caveat (R-5).
+
+9. When `public.embeddings` returns zero rows, the handler still calls Claude with the system prompt only and returns the configured fallback answer (never an empty 200, never a 500).
+
+10. With `conversation_id` supplied, the prompt includes at most the last 4 turns loaded from DynamoDB; the request body cannot inject history (no `history` field accepted — extra fields are rejected by the Zod schema, per the WI-002/JD strict-shape rule).
+
+11. `pnpm -F functions test` green: legacy suites + ≥ 20 new tests across the 9 retrieval modules and the handler.
+
+12. `pnpm -F functions type-check` and `pnpm lint` clean; `kaddo guard` returns 0 findings; `kaddo questions` surfaces no new blocking question this WI should have answered.
+
+---
+
+## Success Metrics
+
+| Metric | Target | Measurement Method |
+|--------|--------|-------------------|
+| **End-to-end latency p50** | < 3 s | CloudWatch Latency metric on Lambda |
+| **End-to-end latency p95** | < 8 s | CloudWatch Latency metric on Lambda |
+| **Error rate (5xx)** | < 0.1% | CloudWatch Errors metric |
+| **402 rate (limit exhaustion)** | Tracked, no target | Business dashboard |
+| **Cross-tenant leakage incidents** | 0 | Security review + automated test |
+| **Token metering accuracy** | 100% exact | DynamoDB `Message` row `input_tokens`/`output_tokens` vs Bedrock response |
+| **Test coverage (new modules)** | ≥ 20 tests passing | `pnpm -F functions test` |
+| **Static analysis** | 0 findings | `kaddo guard` |
+| **OpenAPI conformance** | 0 drift | `kaddo guard` against `WI-006-retrieval-chat-openapi.yaml` |
+
+---
+
+## Out of Scope (Consolidated)
+
+- Streaming/SSE responses
+- Multi-modal inputs, file uploads
+- Frontend citations UI (WI-007)
+- Nightly UsageMetric aggregation job
+- Rate limiting middleware (separate WI)
+- Output content filtering/moderation (follow-up WI)
+- Conversation title generation, search, visitor identity beyond hashed IP+UA
+- Admin preview with JWT (WI-007/WI-008)
+
+---
+
+## Implementation Artifacts (Planned)
+
+The following files will be created/modified during implementation (for spec phase reference):
+
+| Path | Type | Description |
+|------|------|-------------|
+| `apps/functions/src/api/chatPublicMessage.ts` | New | Main handler factory |
+| `apps/functions/src/api/__tests__/chatPublicMessage.test.ts` | New | Handler integration tests |
+| `apps/functions/src/retrieval/resolveChatbotScope.ts` | New | Chatbot scope resolution |
+| `apps/functions/src/retrieval/embedQuestion.ts` | New | Titan v2 embedding |
+| `apps/functions/src/retrieval/retrieveChunks.ts` | New | pgvector retrieval |
+| `apps/functions/src/retrieval/buildPrompt.ts` | New | Prompt construction |
+| `apps/functions/src/retrieval/completeBedrock.ts` | New | Claude completion |
+| `apps/functions/src/retrieval/persistTurn.ts` | New | DynamoDB persistence |
+| `apps/functions/src/retrieval/debitConversation.ts` | New | Atomic credit debit |
+| `apps/functions/src/retrieval/checkLimits.ts` | New | Limit/credit check |
+| `apps/functions/src/retrieval/logger.ts` | New | Structured logging |
+| `apps/functions/src/retrieval/__tests__/*.test.ts` | New | 9 module test suites |
+| `apps/functions/src/server.ts` | Modified | Route registration |
+| `apps/functions/.env.example` | Modified | New env vars |
+| `apps/functions/README.md` | Modified | Contract + latency budget |
+| `openspec/WI-006-retrieval-chat-openapi.yaml` | New | OpenAPI 3.1.0 spec |
+| `knowledge/tech/api-spec.md` | Modified | Endpoint documentation |
+| `tasks/WI-006-retrieval-chat-tasks.yml` | New | Task breakdown (T-01..T-13) |
+
+---
+
+## Validation Checklist (for Spec Phase)
+
+- [ ] All 12 ACs traceable to functional requirements
+- [ ] All 5 DCs reflected in config/env design
+- [ ] All 9 risks have mitigation test cases specified
+- [ ] Data model references `data-model.md` for Conversation/Message shapes
+- [ ] OpenAPI spec includes all error responses with examples
+- [ ] Latency budget decomposed into retrieval/completion/overhead targets
+- [ ] Cold-start warmup step documented in runbook
+- [ ] Bedrock quota increase path documented
+- [ ] Judgment Day focus areas (R-1, R-2) called out for spec review
+
+---
+
+## Appendix: Retrieval Query (Canonical)
+
+```sql
+SELECT id, content, embedding <=> $3 AS score
+FROM public.embeddings
+WHERE chatbot_id = $1
+  AND company_id = $2
+ORDER BY embedding <=> $3
+LIMIT 10;
+```
+
+- `$1` = `chatbot_id` (from path, validated via chatbot row)
+- `$2` = `company_id` (from chatbot row, **never** from request)
+- `$3` = question embedding vector (1024 dims, Titan v2)
+- Executed through RDS Proxy (connection stack inherited from WI-005 DC-005-5)
+
+---
+
+## Appendix: Prompt Template Structure
+
+```
+[SYSTEM PROMPT]
+---
+[CONTEXT CHUNKS]
+<<CHUNK_1>>
+{content[:800]}
+<<SCORE_1>>
+{score}
+<<END_CHUNK_1>>
+...
+<<CHUNK_K>>
+{content[:800]}
+<<SCORE_K>>
+{score}
+<<END_CHUNK_K>>
+---
+[ROLLING CONTEXT - LAST 4 TURNS]
+User: {prev_user_1}
+Assistant: {prev_assistant_1}
+...
+[CURRENT MESSAGE]
+User: {current_message}
+Assistant:
+```
+
+- System prompt: `chatbot.settings.system_prompt` || `CHAT_SYSTEM_PROMPT_DEFAULT`
+- Chunk content capped at 800 chars each
+- Rolling context only when `conversation_id` provided, loaded from DynamoDB
+- No client-injected history accepted
+
+---
+
+*End of Proposal*
