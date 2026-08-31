@@ -3,17 +3,20 @@ info:
   title: chatSaaS Backend API (implemented surface)
   description: >
     Consolidated API reference for every endpoint currently implemented in
-    `apps/functions/src`. Endpoints planned under WI-001 (chatbot CRUD, publish,
-    widget config/iframe) are intentionally absent here. Public chat message
-    sending is documented in detail in WI-006-retrieval-chat-openapi.yaml.
+    `apps/functions/src`, including the WI-001 chatbot management and public
+    widget surface. Public chat message sending is documented in detail in
+    WI-006-retrieval-chat-openapi.yaml.
   version: "1.0.0"
   contact:
     name: chatsaas Team
 servers:
-  - url: http://localhost:3000
+  - url: http://localhost:3001
     description: Local development server
-security:
-  - cognitoJwt: []
+# No global security requirement: in the local sandbox the auth verifier is
+# stubbed (fixed sub + custom:company_id), so requests must NOT send an
+# Authorization header. In production, admin routes require a Cognito access
+# token (bearer JWT, scheme `cognitoJwt` in components); public routes already
+# declare `security: []` per operation.
 paths:
   /healthz:
     get:
@@ -65,6 +68,9 @@ paths:
                 reason: { type: string, nullable: true }
               required: [amount]
               additionalProperties: false
+        example:
+          amount: 5
+          reason: sandbox-test
       responses:
         "200":
           description: Debit applied
@@ -99,6 +105,8 @@ paths:
                 amount: { type: integer, minimum: 1 }
               required: [amount]
               additionalProperties: false
+        example:
+          amount: 100
       responses:
         "200":
           description: Replenish applied
@@ -153,6 +161,8 @@ paths:
                 paymentMethodId: { type: string, nullable: true }
               required: [planId]
               additionalProperties: false
+        example:
+          planId: pro
       responses:
         "200":
           description: Subscription created/updated
@@ -212,6 +222,340 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthError"
+  /api/chatbots:
+    get:
+      summary: List chatbots for the caller's company (draft + published)
+      operationId: listChatbots
+      tags: [Chatbots]
+      responses:
+        "200":
+          description: Chatbots owned by the caller's company (archived excluded)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Chatbot"
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "403":
+          description: Token present but missing custom:company_id claim
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+    post:
+      summary: Create a chatbot (draft)
+      operationId: createChatbot
+      tags: [Chatbots]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                description: { type: string, maxLength: 2000, nullable: true }
+              required: [name]
+              additionalProperties: false
+        example:
+          name: Mi Bot
+          description: bot de pruebas
+      responses:
+        "201":
+          description: Draft chatbot created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/Chatbot"
+                required: [success, data]
+        "400":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "403":
+          description: Missing company_id claim
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/chatbots/published:
+    get:
+      summary: List published chatbots with public URL + iframe snippet
+      operationId: listPublishedChatbots
+      tags: [Chatbots]
+      responses:
+        "200":
+          description: Published chatbots owned by the caller's company
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: array
+                    items:
+                      allOf:
+                        - $ref: "#/components/schemas/Chatbot"
+                        - type: object
+                          properties:
+                            url: { type: string }
+                            iframe_src: { type: string }
+                          required: [url, iframe_src]
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "403":
+          description: Missing company_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/chatbots/{chatbotId}:
+    patch:
+      summary: Update chatbot metadata (name, description)
+      operationId: updateChatbot
+      tags: [Chatbots]
+      parameters:
+        - name: chatbotId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                description: { type: string, maxLength: 2000, nullable: true }
+              additionalProperties: false
+        example:
+          name: Mi Bot renombrado
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    $ref: "#/components/schemas/Chatbot"
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "403":
+          description: Owned by another company / missing company_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "404":
+          description: Chatbot not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+    delete:
+      summary: Archive a chatbot (soft delete)
+      operationId: archiveChatbot
+      tags: [Chatbots]
+      parameters:
+        - name: chatbotId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Archived (status = archived, row kept)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data: { type: "null" }
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "403":
+          description: Owned by another company
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "404":
+          description: Chatbot not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/chatbots/{chatbotId}/publish:
+    post:
+      summary: Publish a chatbot (idempotent) and get its public URL + iframe
+      operationId: publishChatbot
+      tags: [Chatbots]
+      parameters:
+        - name: chatbotId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan_id: { type: string, minLength: 1 }
+              required: [plan_id]
+              additionalProperties: false
+            example:
+              plan_id: pro
+      responses:
+        "202":
+          description: Published (or re-published; timestamps refreshed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, const: published }
+                      url: { type: string }
+                      iframe_src: { type: string }
+                      expires_at: { type: "null" }
+                    required: [status, url, iframe_src, expires_at]
+                required: [success, data]
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "403":
+          description: Owned by another company / missing company_id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+        "404":
+          description: Chatbot not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/public/chatbots/{chatbotId}/config:
+    get:
+      summary: Public widget config for a published chatbot (anonymous)
+      operationId: getPublicChatbotConfig
+      tags: [Public Chatbots]
+      security: []
+      parameters:
+        - name: chatbotId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Widget initialization payload
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      chatbotId: { type: string }
+                      name: { type: string }
+                      status: { type: string, const: published }
+                      expires_at: { type: "null" }
+                    required: [chatbotId, name, status, expires_at]
+                    additionalProperties: false
+                required: [success, data]
+        "404":
+          description: Chatbot not found or not published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
+  /api/public/chatbots/{chatbotId}/iframe:
+    get:
+      summary: Public iframe embed snippet (anonymous)
+      operationId: getPublicChatbotIframe
+      tags: [Public Chatbots]
+      security: []
+      parameters:
+        - name: chatbotId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Iframe snippet
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  data:
+                    type: object
+                    properties:
+                      iframe_src: { type: string }
+                      expires_at: { type: "null" }
+                    required: [iframe_src, expires_at]
+                    additionalProperties: false
+                required: [success, data]
+        "404":
+          description: Chatbot not found or not published
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthError"
   /api/chatbots/{chatbotId}/documents:
     post:
       summary: Upload a document for a chatbot (multipart raw bytes, content-sniffed)
@@ -231,6 +575,7 @@ paths:
           in: header
           required: true
           schema: { type: string }
+          example: manual.txt
       requestBody:
         required: true
         content:
@@ -384,6 +729,9 @@ paths:
                 username: { type: string, nullable: true }
               required: [content]
               additionalProperties: false
+        example:
+          content: hola mundo
+          username: tester
       responses:
         "201":
           description: Message created
@@ -414,6 +762,8 @@ paths:
                 conversation_id: { type: string, format: uuid }
               required: [message]
               additionalProperties: false
+        example:
+          message: Ask a question about the uploaded document.
       responses:
         "200":
           description: Grounded answer (or configured fallback on empty retrieval)
@@ -465,6 +815,19 @@ components:
         price_monthly: { type: integer, description: cents }
         status: { type: string, enum: [active, inactive] }
       required: [id, name, monthly_conversation_limit, monthly_credit_allocated, price_monthly, status]
+    Chatbot:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status:
+          type: string
+          enum: [draft, published, archived]
+        document_count: { type: integer, minimum: 0 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        published_at: { type: string, format: date-time, nullable: true }
+      required: [id, name, status, document_count, created_at, updated_at, published_at]
     DocumentSummary:
       type: object
       properties:

@@ -113,6 +113,10 @@ export interface ChatbotRecord {
   };
   createdAt: string;
   updatedAt: string;
+  /** ISO timestamp set on first publish (WI-001). Absent on drafts. */
+  publishedAt?: string;
+  /** Plan the chatbot was published under (WI-001). Absent on drafts. */
+  planId?: string;
 }
 
 /**

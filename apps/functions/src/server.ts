@@ -15,6 +15,8 @@ import { documentsUploadPlugin } from './api/documentsUpload'
 import { documentsListPlugin } from './api/documentsList'
 import { documentGetPlugin } from './api/documentGet'
 import { chatPublicMessagePlugin, chatRouteEnvFromProcess } from './api/chatPublicMessage'
+import { chatbotsPlugin } from './api/chatbots'
+import { chatbotsPublicPlugin } from './api/chatbotsPublic'
 
 /**
  * Public surface — these routes skip the Cognito JWT verification. Everything
@@ -180,6 +182,10 @@ export async function createServer(
       return reply.code(fastifyErr.statusCode).send({
         success: false,
         error: fastifyErr.message ?? 'Bad request',
+        // Route error schemas require `code`; parser-level errors (415, 413)
+        // carry none. Emit a generic one instead of letting response
+        // serialization fail and mask the real status with an empty 500.
+        code: 'REQUEST_ERROR',
       })
     }
     reply.log.error({ err }, 'unhandled error')
@@ -247,6 +253,31 @@ export async function createServer(
 
   // Mount the public chat surface. It stays anonymous by design (chatbots
   // are publicly embedded), so no hook is attached here.
+  // WI-001 chatbot management + publishing surface. Mounted when the
+  // chatbots table is configured; documentsTable is optional (it only
+  // feeds document_count on list responses).
+  if (chatbotsTable) {
+    await fastify.register(chatbotsPlugin, {
+      prefix: '/api/chatbots',
+      preHook: deps.userPreHook,
+      chatbotsTable,
+      documentsTable,
+    })
+  } else {
+    fastify.log.warn(
+      'WI-001 chatbot management routes disabled: CHATBOTS_TABLE_NAME not set'
+    )
+  }
+
+  // WI-001 public widget surface. Anonymous (no JWT preHook); only
+  // published chatbot rows are served, so the row is the tenant source.
+  if (chatbotsTable) {
+    await fastify.register(chatbotsPublicPlugin, {
+      prefix: '/api/public/chatbots',
+      chatbotsTable,
+    })
+  }
+
   await fastify.register(chatPublicPlugin, {
     prefix: '/api/chat/public',
   })

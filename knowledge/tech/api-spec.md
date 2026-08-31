@@ -236,9 +236,11 @@ These endpoints are accessed via the public URL or iframe embed (e.g., `https://
     - Zero retrieval rows → configured fallback answer (`CHAT_FALLBACK_ANSWER`), never an ungrounded completion (AC 9).
     - Latency budget: p50 < 3 s, p95 < 8 s. Streaming (SSE) out of scope.
 
-### Generate iframe embed code — PLANNED (WI-001, not yet implemented)
+### Generate iframe embed code — IMPLEMENTED (WI-001)
 
-- `GET /api/public/chatbots/:chatbotId/iframe`
+- `POST /api/chatbots/:chatbotId/publish` returns `url`, `iframe_src`, and `expires_at: null` (202). Idempotent; validates `plan_id` strictly (400, zero reads on invalid body).
+- `GET /api/public/chatbots/:chatbotId/iframe` (anonymous) returns the snippet for a published chatbot; draft/archived/missing → 404.
+- `GET /api/chatbots/published` lists published chatbots with `url` + `iframe_src` per item.
 - Response:
   ```json
   {
@@ -248,6 +250,7 @@ These endpoints are accessed via the public URL or iframe embed (e.g., `https://
     }
   }
   ```
+  The public base URL comes from `PUBLIC_CHAT_BASE_URL` (default `https://chat.chatsaas.local`).
 
 ## Rate Limits
 
