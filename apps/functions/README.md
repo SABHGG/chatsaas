@@ -75,3 +75,40 @@ Runbook — warm-up ping after every deploy:
 pnpm -F functions test        # vitest
 pnpm -F functions type-check  # tsc --noEmit
 ```
+
+## Local sandbox API (`pnpm dev:api`)
+
+Runs the same Fastify server as production, but with Cognito JWT verification
+replaced by a stub (the real JWKS is unreachable locally) and resource names
+pointed at the local floci emulator tables/bucket.
+
+1. Create `apps/functions/.env` (gitignored). Quickest way to seed AWS
+   credentials and resource names from the emulator — the `export KEY=value`
+   lines `floci env` prints are accepted as-is by Node's `--env-file` parser:
+
+   ```bash
+   cd apps/functions
+   floci env > .env
+   ```
+
+2. Append the sandbox-specific variables (sensible defaults shown):
+
+   ```
+   PORT=3001
+   SANDBOX_USER_SUB=sandbox-user-1
+   SANDBOX_COMPANY_ID=sandbox-company-1
+   DOCUMENTS_BUCKET=chatsaas-sandbox-documents
+   DOCUMENTS_TABLE=chatsaas-sandbox-documents
+   ```
+
+3. Run the API with watch mode from the repo root:
+
+   ```bash
+   pnpm dev:api
+   ```
+
+   (equivalent to `pnpm -F @chatsaas/functions dev:sandbox`)
+
+No more pasting `eval $(floci env)` into the terminal: the `.env` file is
+loaded automatically, and the server starts without it (routes whose env vars
+are missing simply are not mounted).

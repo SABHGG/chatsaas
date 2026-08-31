@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter @chatsaas/functions dev:sandbox",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",

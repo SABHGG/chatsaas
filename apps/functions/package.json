@@ -8,6 +8,7 @@
     "test": "vitest",
     "type-check": "tsc --noEmit",
     "dev": "tsx watch src/server.ts",
+    "dev:sandbox": "tsx watch --env-file-if-exists=.env scripts/sandbox-server.ts",
     "start": "tsx src/server.ts"
   },
   "dependencies": {
