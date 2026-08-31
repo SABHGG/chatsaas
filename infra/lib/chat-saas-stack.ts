@@ -59,9 +59,12 @@ export class ChatSaaSStack extends Stack {
       ? { privateSubnetIds: privateSubnetIdsRaw.split(",").map((s) => s.trim()) }
       : undefined;
 
-    const subnetSelection: SubnetSelection = ctx
-      ? { subnetIds: ctx.privateSubnetIds }
-      : vpc.selectSubnets({ subnetType: vpc.privateSubnets[0]?.subnetType ?? undefined });
+    // ISubnet does not expose `subnetType`, so we select the VPC's private
+// subnets directly; the context path filters them by explicit subnet IDs.
+const privateSubnets = vpc.privateSubnets;
+const subnetSelection: SubnetSelection = ctx
+  ? { subnets: privateSubnets.filter((s) => ctx.privateSubnetIds.includes(s.subnetId)) }
+  : { subnets: privateSubnets };
 
     // Aurora cluster with `vector` preloaded.
     const { cluster } = createAuroraPgVector(this, {

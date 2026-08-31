@@ -1,5 +1,6 @@
 import { Duration, RemovalPolicy } from "aws-cdk-lib";
 import {
+  AuroraCapacityUnit,
   AuroraPostgresEngineVersion,
   Credentials,
   DatabaseClusterEngine,
@@ -44,14 +45,15 @@ export function createAuroraPgVector(
     securityGroups: [props.clusterSecurityGroup],
     parameterGroup,
     credentials: Credentials.fromSecret(props.secret, "chatsaas_admin"),
-    databaseName: props.databaseName,
+    defaultDatabaseName: props.databaseName,
     scaling: {
-      minCapacity: 0.5,
-      maxCapacity: 4,
-    },
+  // AuroraCapacityUnit (Serverless v1) has no 0.5 step — whole ACUs only.
+  minCapacity: AuroraCapacityUnit.ACU_1,
+  maxCapacity: AuroraCapacityUnit.ACU_4,
+},
     removalPolicy: RemovalPolicy.SNAPSHOT,
     deletionProtection: false,
-    storageEncrypted: true,
+    // Aurora Serverless v1 storage is always encrypted; no storageEncrypted prop.
     backupRetention: Duration.days(7),
   });
 

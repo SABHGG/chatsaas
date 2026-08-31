@@ -3,7 +3,8 @@ import { ISecurityGroup, IVpc, Port, SubnetSelection } from "aws-cdk-lib/aws-ec2
 import {
   DatabaseProxy,
   ProxyTarget,
-  ServerlessCluster,
+  type IDatabaseCluster,
+  type IServerlessCluster,
 } from "aws-cdk-lib/aws-rds";
 import { ISecret } from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
@@ -21,7 +22,7 @@ import { Construct } from "constructs";
 export function createRdsProxy(
   scope: Construct,
   props: {
-    cluster: ServerlessCluster;
+    cluster: IServerlessCluster;
     secret: ISecret;
     vpc: IVpc;
     proxySecurityGroup: ISecurityGroup;
@@ -30,7 +31,9 @@ export function createRdsProxy(
   },
 ): DatabaseProxy {
   const proxy = new DatabaseProxy(scope, "AuroraProxy", {
-    proxyTarget: ProxyTarget.fromCluster(props.cluster),
+    // ServerlessCluster is structurally a cluster target at runtime, but CDK types
+      // fromCluster as IDatabaseCluster only.
+      proxyTarget: ProxyTarget.fromCluster(props.cluster as unknown as IDatabaseCluster),
     secrets: [props.secret],
     vpc: props.vpc,
     vpcSubnets: props.subnetSelection,

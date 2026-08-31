@@ -56,12 +56,11 @@ export const handler: PreTokenGenerationTriggerHandler = async (
   // explicitly so the value is also present under the claimsOverride.details object that
   // downstream consumers can read consistently.
   const groupsOverride = event.request.groupConfiguration?.groupsToOverride;
-  const groups: string[] = [];
-  if (typeof groupsOverride === "string" && groupsOverride.length > 0) {
-    groups.push(groupsOverride);
-  }
+  const groups: string[] = Array.isArray(groupsOverride) ? groupsOverride : [];
   if (groups.length > 0) {
-    claims["cognito:groups"] = groups;
+    // aws-lambda types claimsToAddOrOverride as Record<string, string>, but Cognito
+    // accepts string lists for `cognito:groups` in the claims override payload.
+    (claims as Record<string, unknown>)["cognito:groups"] = groups;
   }
 
   // Admin users must have TOTP enrolled. If not, refuse the token.

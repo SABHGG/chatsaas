@@ -1,4 +1,4 @@
-import { Port, SecurityGroup, Vpc } from "aws-cdk-lib/aws-ec2";
+import { type IVpc, Port, SecurityGroup } from "aws-cdk-lib/aws-ec2";
 import { Construct } from "constructs";
 
 /**
@@ -10,7 +10,7 @@ import { Construct } from "constructs";
  * The Lambda wiring itself is a follow-up WI; this constructs the SGs so the cluster and proxy
  * can already reference them.
  */
-export function createSecurityGroups(scope: Construct, vpc: Vpc) {
+export function createSecurityGroups(scope: Construct, vpc: IVpc) {
   const lambdaSg = new SecurityGroup(scope, "LambdaSG", {
     vpc,
     description: "Security group for chatSaaS Lambda functions (outbound to RDS Proxy)",
