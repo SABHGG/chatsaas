@@ -36,7 +36,7 @@ describe('retrieveChunks (R-1 scope, pgvector)', () => {
     )
 
     const input = rdsMock.calls()[0].args[0].input as ExecuteStatementCommand['input']
-    expect(input.sql).toContain('chatbot_id = :chatbotId AND company_id = :companyId')
+    expect(input.sql).toContain('chatbot_id = :chatbotId::uuid AND company_id = :companyId::uuid')
     const params = Object.fromEntries(
       ((input.parameters ?? []) as Array<{ name?: string; value?: { stringValue?: string; longValue?: number } }>).map((p) => [p.name, p.value?.stringValue ?? p.value?.longValue]),
     )

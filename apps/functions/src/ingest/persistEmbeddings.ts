@@ -39,7 +39,7 @@ export async function persistChunks(
   for (const row of rows) {
     const sql = `
       INSERT INTO public.embeddings (id, chatbot_id, company_id, content, content_sha256, embedding)
-      VALUES (:id, :chatbotId, :companyId, :content, :contentSha256, :embedding::vector)
+      VALUES (:id::uuid, :chatbotId::uuid, :companyId::uuid, :content, :contentSha256, :embedding::vector)
       ON CONFLICT (chatbot_id, content_sha256) DO NOTHING
       RETURNING id;
     `;

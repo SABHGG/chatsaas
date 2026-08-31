@@ -31,7 +31,7 @@ export async function retrieveChunks(
   const sql = `
     SELECT id, content, embedding <=> :embedding::vector AS score
     FROM public.embeddings
-    WHERE chatbot_id = :chatbotId AND company_id = :companyId
+    WHERE chatbot_id = :chatbotId::uuid AND company_id = :companyId::uuid
     ORDER BY embedding <=> :embedding::vector
     LIMIT :topK;
   `
