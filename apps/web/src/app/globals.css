@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+/*
+ * The Operator's Board — design tokens (ADR-007 / DC-007-1).
+ *
+ * Tailwind v4 is CSS-first: tokens live in `@theme`, there is no
+ * tailwind.config.ts. Named rules are structurally encoded here:
+ *
+ * - Live Line Rule: `patch-amber` exists as a *surface* token only.
+ *   There is no amber text token except `patch-amber-deep`, which exists
+ *   solely because amber-on-ivory fails the 4.5:1 contrast floor. Amber
+ *   must never become a background wash; components ration it to the lit
+ *   jack and the primary create/publish control.
+ * - Flat-by-Default Rule: the only shadow token in the system is
+ *   `--shadow-live-jack`, reserved for the lit jack at publish.
+ * - No dark mode (DC-007-4): `color-scheme` is pinned to light.
+ */
+@theme {
+  /* The committed palette */
+  --color-patch-amber: #b8860b;
+  --color-operators-ivory: #f8f4e9;
+  --color-slate-ink: #2d3142;
+  --color-hairline-slate: #d6d2c4;
+
+  /* Text-safe amber: amber itself is ~3:1 on ivory (surface-only); this
+     darker step clears 4.5:1 for the rare case amber must appear as text. */
+  --color-patch-amber-deep: #8a6508;
+
+  /* Tonal layering on the ivory ground (depth without shadows) */
+  --color-panel-warm: #fdfbf4;
+  --color-well-warm: #ede7d3;
+
+  /* Jack-and-plug geometry */
+  --radius-jack: 9999px; /* the circular jack — always a perfect circle */
+  --radius-plug: 9999px; /* the plug (primary create/publish control) */
+  --radius-card: 14px; /* gently rounded jack-card rectangles */
+  --radius-plate: 6px; /* engraved-plate labels and small controls */
+
+  /* Engraved plate letter spacing for mono labels (Jack Label Rule) */
+  --tracking-plate: 0.08em;
+
+  /* The single elevated moment in the system: the lit jack at publish.
+     Offset + soft blur per the craft floor — never a flat halo. */
+  --shadow-live-jack: 0 2px 12px 0 rgb(184 134 11 / 0.35);
+
+  /*
+   * The one authored motion in the system (ADR-007): the patch-cord
+   * "click" when a line is plugged in at publish. The jack presses in,
+   * settles, and its shadow blooms to the resting live-jack shadow.
+   * Opt-in only (`justPlugged` on JackCard) — the board never animates
+   * for decoration.
+   */
+  --animate-jack-click: jack-click 450ms cubic-bezier(0.22, 1, 0.36, 1) 1;
+
+  @keyframes jack-click {
+    0% {
+      transform: scale(0.85);
+      box-shadow: 0 0 0 0 rgb(184 134 11 / 0);
+    }
+    55% {
+      transform: scale(1.06);
+      box-shadow: 0 2px 18px 0 rgb(184 134 11 / 0.45);
+    }
+    100% {
+      transform: scale(1);
+      box-shadow: var(--shadow-live-jack);
+    }
+  }
+}
+
+/*
+ * Fonts load through next/font and expose CSS variables on <html>;
+ * `inline` makes utilities reference those variables directly.
+ * Inter is the workhorse sans for body and data; IBM Plex Mono is the
+ * machined label voice (jack labels, URLs, embed code).
+ */
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+}
+
+@layer base {
+  html {
+    /* Day-lit panel only — no dark mode in this work item (DC-007-4). */
+    color-scheme: light;
+  }
+
+  body {
+    background-color: var(--color-operators-ivory);
+    color: var(--color-slate-ink);
+    caret-color: var(--color-slate-ink);
+  }
+
+  /* Focus is ink on ivory — never the blue SaaS default. */
+  :focus-visible {
+    outline: 2px solid var(--color-slate-ink);
+    outline-offset: 2px;
+    /* Fallback: v4 may inline scalar radius tokens instead of emitting the var. */
+    border-radius: var(--radius-plate, 6px);
+  }
+
+  /* Browser surfaces carry the design too (craft floor). */
+  ::selection {
+    background-color: var(--color-slate-ink);
+    color: var(--color-operators-ivory);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-hairline-slate) transparent;
+  }
+}
