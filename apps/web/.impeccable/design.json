@@ -1,0 +1,218 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-31T10:42:01Z",
+  "title": "Design System: chatSaaS — The Operator's Board",
+  "extensions": {
+    "sources": {
+      "tokens": "apps/web/src/app/globals.css (@theme / @theme inline / @layer base)",
+      "fonts": "apps/web/src/app/layout.tsx (next/font: Inter, IBM Plex Mono 400/500/600)",
+      "typeRamp": "apps/web/src/app/board/page.tsx, apps/web/src/app/board/layout.tsx, apps/web/src/app/board/wizard/{page,documents/page,review/page,publish/page}.tsx, apps/web/src/app/board/plan/page.tsx, apps/web/src/app/login/page.tsx",
+      "components": [
+        "apps/web/src/components/line-state-pill.tsx",
+        "apps/web/src/components/jack-card.tsx",
+        "apps/web/src/components/usage-meter.tsx",
+        "apps/web/src/components/usage-slot.tsx",
+        "apps/web/src/components/stepper.tsx",
+        "apps/web/src/components/dialog.tsx",
+        "apps/web/src/components/file-dropzone.tsx",
+        "apps/web/src/components/embed-snippet.tsx",
+        "apps/web/src/components/chatbot-detail-header.tsx"
+      ]
+    },
+    "colorMeta": {
+      "patch-amber": {
+        "role": "primary",
+        "displayName": "Patch Amber",
+        "note": "Surface-only amber: live jack body, live pill dot/border, current stepper waypoint, live ring shadow. Never text on ivory (~3:1)."
+      },
+      "patch-amber-deep": {
+        "role": "primary",
+        "displayName": "Patch Amber Deep",
+        "note": "The text-safe amber (contrast fix from the finish review): amber labels and filled primary control grounds; clears 4.5:1 on ivory."
+      },
+      "operators-ivory": {
+        "role": "neutral",
+        "displayName": "Operator's Ivory",
+        "note": "Page ground; text on filled controls; the pinhole in every jack; selection foreground."
+      },
+      "panel-warm": {
+        "role": "neutral",
+        "displayName": "Panel Warm",
+        "note": "Card surface, one bright step above the ground: cards, dialog panels, inputs, snippet boxes."
+      },
+      "well-warm": {
+        "role": "neutral",
+        "displayName": "Well Warm",
+        "note": "Inset well, one warm step below the ground: meter/progress channels, drag-over, hover and selected grounds."
+      },
+      "slate-ink": {
+        "role": "neutral",
+        "displayName": "Slate Ink",
+        "note": "Primary text, unlit jack bodies, ink fills and ink plug, focus outline, selection background, 40% dialog overlay."
+      },
+      "hairline-slate": {
+        "role": "neutral",
+        "displayName": "Hairline Slate",
+        "note": "All 1px borders and dividers; dashed dropzone outline; unwired stepper cords; thin scrollbars."
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "Page titles only — 'Your lines', 'Plan & credits' (text-3xl font-semibold tracking-tight)." },
+      "headline": { "displayName": "Headline", "purpose": "Wizard step titles (text-2xl font-semibold tracking-tight)." },
+      "title": { "displayName": "Title", "purpose": "Section subheads and card names in Inter; bot names on jacks use the Label voice instead." },
+      "body": { "displayName": "Body", "purpose": "Helper text and descriptions at 70–80% ink, relaxed leading." },
+      "label": { "displayName": "Label", "purpose": "Engraved-plate mono: jack names, pills, buttons, nav, readouts (tabular-nums for numbers)." }
+    },
+    "shadows": [
+      {
+        "name": "live-jack",
+        "value": "0 2px 12px 0 rgb(184 134 11 / 0.35)",
+        "purpose": "The ONLY shadow in the system — the amber ring on a lit jack at publish. 2px offset + 12px blur (never a flat halo)."
+      }
+    ],
+    "motion": [
+      {
+        "name": "jack-click",
+        "value": "jack-click 450ms cubic-bezier(0.22, 1, 0.36, 1) 1",
+        "purpose": "The one authored motion (ADR-007): the patch-cord click when a line is plugged in at publish — and on the embed jack after a successful copy. Opt-in only (justPlugged); the board never animates for decoration.",
+        "keyframes": {
+          "name": "jack-click",
+          "steps": [
+            { "at": "0%", "transform": "scale(0.85)", "boxShadow": "0 0 0 0 rgb(184 134 11 / 0)" },
+            { "at": "55%", "transform": "scale(1.06)", "boxShadow": "0 2px 18px 0 rgb(184 134 11 / 0.45)" },
+            { "at": "100%", "transform": "scale(1)", "boxShadow": "var(--shadow-live-jack)" }
+          ]
+        }
+      }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px", "purpose": "Header gaps tighten below sm so the compact credits pill fits." },
+      { "name": "md", "value": "768px", "purpose": "Below md the meter card hides; the credits position rides the header as a compact ink pill." }
+    ],
+    "structure": {
+      "focusRing": "2px solid var(--color-slate-ink) outline, 2px offset, border-radius falls back to var(--radius-plate, 6px)",
+      "selection": "Slate Ink background, Operator's Ivory text",
+      "scrollbar": "thin, Hairline Slate thumb",
+      "colorScheme": "light (pinned — no dark mode, DC-007-4)"
+    }
+  },
+  "components": [
+    {
+      "name": "Plug — primary",
+      "kind": "button",
+      "refersTo": "plug-primary",
+      "description": "The plug: primary create/publish control. Patch Amber Deep ground, ivory mono label. Only where a line is actually plugged in.",
+      "html": "<button class=\"ds-plug-primary\">Plug in a new line</button>",
+      "css": ".ds-plug-primary { background: var(--color-patch-amber-deep, #8a6508); color: var(--color-operators-ivory, #f8f4e9); border: none; border-radius: var(--radius-plug, 9999px); padding: 10px 20px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: background 0.2s; } .ds-plug-primary:hover { background: rgb(138 101 8 / 0.9); } .ds-plug-primary:focus-visible { outline: 2px solid var(--color-slate-ink, #2d3142); outline-offset: 2px; } .ds-plug-primary:disabled { opacity: 0.6; }"
+    },
+    {
+      "name": "Plug — ink",
+      "kind": "button",
+      "refersTo": "plug-ink",
+      "description": "The workhorse pill: step continues, Copy snippet, Unplug, login. Slate Ink ground, ivory mono label.",
+      "html": "<button class=\"ds-plug-ink\">Copy snippet</button>",
+      "css": ".ds-plug-ink { background: var(--color-slate-ink, #2d3142); color: var(--color-operators-ivory, #f8f4e9); border: none; border-radius: var(--radius-plug, 9999px); padding: 10px 20px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: background 0.2s; } .ds-plug-ink:hover { background: rgb(45 49 66 / 0.9); } .ds-plug-ink:focus-visible { outline: 2px solid var(--color-slate-ink, #2d3142); outline-offset: 2px; } .ds-plug-ink:disabled { opacity: 0.6; }"
+    },
+    {
+      "name": "Ghost plate button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Cancel, dismiss, Try again, Go to plan. Panel Warm ground, hairline border, ink mono label; hover settles on Well Warm.",
+      "html": "<button class=\"ds-btn-ghost\">Go to plan</button>",
+      "css": ".ds-btn-ghost { background: var(--color-panel-warm, #fdfbf4); color: var(--color-slate-ink, #2d3142); border: 1px solid var(--color-hairline-slate, #d6d2c4); border-radius: var(--radius-plate, 6px); padding: 8px 16px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: background 0.2s; } .ds-btn-ghost:hover { background: var(--color-well-warm, #ede7d3); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--color-slate-ink, #2d3142); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text input",
+      "kind": "input",
+      "refersTo": "input-text",
+      "description": "Board input: Panel Warm ground, hairline border, 14px card radius. Placeholder and text in ink.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Name the line\" />",
+      "css": ".ds-input { background: var(--color-panel-warm, #fdfbf4); color: var(--color-slate-ink, #2d3142); border: 1px solid var(--color-hairline-slate, #d6d2c4); border-radius: var(--radius-card, 14px); padding: 12px 16px; font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif); font-size: 16px; width: 100%; } .ds-input::placeholder { color: rgb(45 49 66 / 0.7); } .ds-input:focus-visible { outline: 2px solid var(--color-slate-ink, #2d3142); outline-offset: 2px; }"
+    },
+    {
+      "name": "Line-state pill",
+      "kind": "chip",
+      "refersTo": "pill-state",
+      "description": "The four-state line vocabulary (Unplugged / Connecting / Live / On hold). Live is the only amber state; others stay achromatic.",
+      "html": "<span class=\"ds-pill ds-pill--live\"><span class=\"ds-pill-dot\"></span>Live</span> <span class=\"ds-pill\"><span class=\"ds-pill-dot\"></span>Unplugged</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--color-hairline-slate, #d6d2c4); border-radius: var(--radius-plate, 6px); padding: 4px 10px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-slate-ink, #2d3142); } .ds-pill-dot { width: 6px; height: 6px; border-radius: var(--radius-jack, 9999px); background: rgb(45 49 66 / 0.4); } .ds-pill--live { border-color: var(--color-patch-amber, #b8860b); color: var(--color-patch-amber-deep, #8a6508); } .ds-pill--live .ds-pill-dot { background: var(--color-patch-amber, #b8860b); }"
+    },
+    {
+      "name": "Jack card",
+      "kind": "card",
+      "refersTo": "card-jack",
+      "description": "The labeled jack row: circular jack (44px, ivory pinhole), engraved-plate bot name, trailing state pill. Flat card; the only shadow lives on the lit jack. The just-plugged click plays once via .ds-jack--clicked.",
+      "html": "<article class=\"ds-jack-card\"><span class=\"ds-jack ds-jack--live ds-jack--clicked\"><span class=\"ds-jack-pinhole\"></span></span><h3 class=\"ds-jack-name\">Front desk answers</h3><span class=\"ds-card-pill ds-card-pill--live\"><span class=\"ds-card-pill-dot\"></span>Live</span></article>",
+      "css": ".ds-jack-card { display: flex; align-items: center; gap: 16px; background: var(--color-panel-warm, #fdfbf4); border: 1px solid var(--color-hairline-slate, #d6d2c4); border-radius: var(--radius-card, 14px); padding: 20px; } .ds-jack { flex-shrink: 0; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: var(--radius-jack, 9999px); background: var(--color-slate-ink, #2d3142); transition: background-color 0.3s; } .ds-jack--live { background: var(--color-patch-amber, #b8860b); box-shadow: var(--shadow-live-jack, 0 2px 12px 0 rgb(184 134 11 / 0.35)); } .ds-jack-pinhole { width: 12px; height: 12px; border-radius: var(--radius-jack, 9999px); background: var(--color-operators-ivory, #f8f4e9); } .ds-jack-name { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono, ui-monospace, monospace); font-size: 14px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-slate-ink, #2d3142); } .ds-card-pill { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--color-hairline-slate, #d6d2c4); border-radius: var(--radius-plate, 6px); padding: 4px 10px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-slate-ink, #2d3142); flex-shrink: 0; } .ds-card-pill-dot { width: 6px; height: 6px; border-radius: var(--radius-jack, 9999px); background: rgb(45 49 66 / 0.4); } .ds-card-pill--live { border-color: var(--color-patch-amber, #b8860b); color: var(--color-patch-amber-deep, #8a6508); } .ds-card-pill--live .ds-card-pill-dot { background: var(--color-patch-amber, #b8860b); } @keyframes ds-jack-click { 0% { transform: scale(0.85); box-shadow: 0 0 0 0 rgb(184 134 11 / 0); } 55% { transform: scale(1.06); box-shadow: 0 2px 18px 0 rgb(184 134 11 / 0.45); } 100% { transform: scale(1); box-shadow: var(--shadow-live-jack, 0 2px 12px 0 rgb(184 134 11 / 0.35)); } } .ds-jack--clicked { animation: ds-jack-click 450ms cubic-bezier(0.22, 1, 0.36, 1) 1; } @media (prefers-reduced-motion: reduce) { .ds-jack--clicked { animation: none; } }"
+    },
+    {
+      "name": "Create-flow stepper",
+      "kind": "nav",
+      "refersTo": "stepper",
+      "description": "Four cord waypoints (name → documents → review → publish). Current step carries Patch Amber — the plug path; the cord is ink once wired, hairline ahead.",
+      "html": "<ol class=\"ds-stepper\"><li class=\"ds-step\"><span class=\"ds-step-dot ds-step-dot--complete\"></span><span class=\"ds-step-cord ds-step-cord--wired\"></span><span class=\"ds-step-label\">Name</span></li><li class=\"ds-step\"><span class=\"ds-step-dot ds-step-dot--current\"></span><span class=\"ds-step-cord\"></span><span class=\"ds-step-label ds-step-label--current\">Documents</span></li><li class=\"ds-step\"><span class=\"ds-step-dot\"></span><span class=\"ds-step-cord\"></span><span class=\"ds-step-label ds-step-label--future\">Review</span></li><li class=\"ds-step\"><span class=\"ds-step-dot\"></span><span class=\"ds-step-label ds-step-label--future\">Publish</span></li></ol>",
+      "css": ".ds-stepper { display: flex; align-items: flex-start; width: 100%; margin: 0; padding: 0; list-style: none; } .ds-step { flex: 1; } .ds-step:last-child { flex: 0; } .ds-step-dot { display: inline-block; width: 16px; height: 16px; border-radius: var(--radius-jack, 9999px); border: 2px solid var(--color-hairline-slate, #d6d2c4); background: transparent; vertical-align: middle; } .ds-step-dot--complete { border-color: var(--color-slate-ink, #2d3142); background: var(--color-slate-ink, #2d3142); } .ds-step-dot--current { border-color: var(--color-patch-amber, #b8860b); background: var(--color-patch-amber, #b8860b); } .ds-step-cord { display: inline-block; height: 1px; flex: 1; background: var(--color-hairline-slate, #d6d2c4); vertical-align: middle; } .ds-step-cord--wired { background: var(--color-slate-ink, #2d3142); } .ds-step-label { display: block; margin-top: 8px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-slate-ink, #2d3142); } .ds-step-label--current { color: var(--color-patch-amber-deep, #8a6508); } .ds-step-label--future { color: rgb(45 49 66 / 0.7); }"
+    },
+    {
+      "name": "Usage meter",
+      "kind": "custom",
+      "refersTo": "usage-meter",
+      "description": "Plan + credits as panel instrumentation: gauge channel in Well Warm with ink fill and an 80% boundary tick. Fill stays ink at every level; alerts speak through labels.",
+      "html": "<section class=\"ds-meter\"><div class=\"ds-meter-head\"><h3 class=\"ds-meter-title\">Credits</h3><span class=\"ds-meter-status\">Almost out of credits</span></div><div class=\"ds-meter-channel\" role=\"meter\" aria-valuenow=\"8\" aria-valuemax=\"10\"><span class=\"ds-meter-fill\" style=\"width: 80%\"></span><span class=\"ds-meter-tick\"></span></div><div class=\"ds-meter-readout\"><span>Starter · 8 / 10</span><span>Prepaid 12</span></div><p class=\"ds-meter-copy\">Add prepaid credits to stay live through the month.</p></section>",
+      "css": ".ds-meter { background: var(--color-panel-warm, #fdfbf4); border: 1px solid var(--color-hairline-slate, #d6d2c4); border-radius: var(--radius-card, 14px); padding: 20px; } .ds-meter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; } .ds-meter-title { margin: 0; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-slate-ink, #2d3142); } .ds-meter-status { border: 1px solid rgb(45 49 66 / 0.3); border-radius: var(--radius-plate, 6px); padding: 4px 10px; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-slate-ink, #2d3142); } .ds-meter-channel { position: relative; margin-top: 16px; height: 8px; overflow: hidden; border-radius: var(--radius-jack, 9999px); background: var(--color-well-warm, #ede7d3); } .ds-meter-fill { position: absolute; top: 0; bottom: 0; left: 0; background: var(--color-slate-ink, #2d3142); transition: width 0.3s; } .ds-meter-tick { position: absolute; top: 0; bottom: 0; left: 80%; width: 1px; background: rgb(45 49 66 / 0.3); } .ds-meter-readout { margin-top: 12px; display: flex; justify-content: space-between; font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; font-variant-numeric: tabular-nums; color: var(--color-slate-ink, #2d3142); } .ds-meter-copy { margin: 8px 0 0; font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif); font-size: 14px; color: rgb(45 49 66 / 0.7); }"
+    },
+    {
+      "name": "In-world dialog",
+      "kind": "custom",
+      "refersTo": "dialog-panel",
+      "description": "The flat in-world confirmation surface: 40% ink overlay, Panel Warm panel with hairline border and NO shadow. Never window.confirm.",
+      "html": "<div class=\"ds-dialog-overlay\"><div class=\"ds-dialog-panel\" role=\"dialog\" aria-modal=\"true\"><h2 class=\"ds-dialog-title\">Plug this line in</h2><p class=\"ds-dialog-body\">Pick the plan this line rides on. You can change it later from the Plan page.</p><div class=\"ds-dialog-actions\"><button class=\"ds-btn-ghost\">Not now</button><button class=\"ds-plug-primary\">Plug in</button></div></div></div>",
+      "css": ".ds-dialog-overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 24px; background: rgb(45 49 66 / 0.4); } .ds-dialog-panel { width: 100%; max-width: 28rem; background: var(--color-panel-warm, #fdfbf4); border: 1px solid var(--color-hairline-slate, #d6d2c4); border-radius: var(--radius-card, 14px); padding: 24px; outline: none; } .ds-dialog-title { margin: 0; font-family: var(--font-mono, ui-monospace, monospace); font-size: 14px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-slate-ink, #2d3142); } .ds-dialog-body { margin: 12px 0 0; font-family: var(--font-sans, ui-sans-serif, system-ui, sans-serif); font-size: 14px; line-height: 1.625; color: rgb(45 49 66 / 0.8); } .ds-dialog-actions { margin-top: 24px; display: flex; align-items: center; justify-content: flex-end; gap: 12px; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Operator's Board",
+    "overview": "chatSaaS is a switchboard. The operator — a non-technical small-business owner — plugs a customer's question into their knowledge by connecting two jacks, and the line goes live. The managed infrastructure (the rack, the routing, the machines) is real but invisible; the operator only ever sees labeled jacks, a patch cord, and a lit line. The interface is a calm instrument panel: warm ivory ground, deep slate ink, and a single warm accent that appears only where a line is actually live. Every state reads instantly from the panel's own vocabulary — unplugged, connecting, live, on hold — never from jargon.\n\nThis is a workhorse surface, not a spectacle. The visitor came to operate: create a chatbot from their documents, publish it to their site, and know exactly where they stand against their plan and credits. Density is generous and unhurried; nothing glitters except the moment a line goes live. The register is trustworthy, warm, and engineered to feel like a well-kept machine room rather than a startup dashboard. The build landed as committed, with two recorded adaptations: depth is carried by a two-step tonal layering (Panel Warm cards on the ivory ground, Well Warm for inset wells — Panel Warm #FDFBF4, Well Warm #EDE7D3), and amber gained a second, darker step (Patch Amber Deep #8A6508) because raw amber on ivory fails the 4.5:1 contrast floor for text and filled controls. Raw Patch Amber stays surface-only; Deep is the amber that speaks.",
+    "keyCharacteristics": [
+      "One warm accent (amber) reserved for the live line; everything else stays achromatic.",
+      "Ivory/cream ground with deep slate ink — light, not dark, built for daytime office use (light scheme is pinned; no dark mode).",
+      "Inter for body and data; IBM Plex Mono labels with engraved-plate letter spacing (0.08em).",
+      "Two-step tonal layering instead of shadows: Panel Warm cards on the ivory ground, Well Warm wells; exactly one shadow in the system.",
+      "Generous rhythm and quiet density; the interface recedes until a line is live.",
+      "Every bot is a labeled jack on a board; states are line states, never status widgets."
+    ],
+    "rules": [
+      {
+        "name": "The Live Line Rule",
+        "body": "Patch Amber appears only on the line that is active: the lit jack of a published bot, the primary create/publish control, the create flow's current waypoint (the plug path — sanctioned by the WI-007 visual contract, Task 8), and the live pill. Raw amber is surface-only; amber as text is always Patch Amber Deep. If amber covers more than a small fraction of a screen, the design has drifted.",
+        "section": "colors"
+      },
+      {
+        "name": "The Jack Label Rule",
+        "body": "Labels read like engraved plate: short, machine-precise, never sentence-long. A label that needs a paragraph is body copy, not a label.",
+        "section": "typography"
+      },
+      {
+        "name": "The Flat-by-Default Rule",
+        "body": "Surfaces are flat at rest. The only elevated moment in the system is the live jack at the moment a line is plugged in.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep Patch Amber rare and purposeful — the live jack, the plug control, the current waypoint, and the live pill only; raw amber surface-only, #8A6508 wherever amber must be text or a filled control.",
+      "Do keep every label and state in the operator's plain language; never expose cloud or infrastructure vocabulary.",
+      "Do read states from the line vocabulary (unplugged / connecting / live / on hold) rather than generic status widgets.",
+      "Do carry depth with the two-step tonal layering — Panel Warm #FDFBF4 for surfaces, Well Warm #EDE7D3 for wells, hovers, and selections.",
+      "Do keep browser surfaces in-world: ink selection, thin hairline scrollbars, light scheme pinned.",
+      "Do write all UI copy in English, per the product language commitment."
+    ],
+    "donts": [
+      "Don't fall back to the generic blue SaaS dashboard — the ivory/slate/amber board is the committed world (the focus outline is ink, never the blue default).",
+      "Don't introduce green or red for status; the amber line and its state label carry meaning alone.",
+      "Don't add a second shadow or animate the board for decoration — the only shadow is the live jack's, and the only authored motion is the patch-cord click at publish/copy moments.",
+      "Don't set raw Patch Amber as text on ivory; it fails 4.5:1 — Patch Amber Deep exists for that.",
+      "Don't let the retro switchboard theme slip into kitsch — keep it engineered, calm, and restrained.",
+      "Don't use multiple accents; the system has one voice. And don't reach for window.confirm/alert — the in-world Dialog is the only confirmation surface."
+    ]
+  }
+}
