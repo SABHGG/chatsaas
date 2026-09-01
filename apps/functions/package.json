@@ -30,7 +30,7 @@
     "mammoth": "^1.8.0",
     "pdf-parse": "^1.1.1",
     "uuid": "^14.0.2",
-    "zod": "^4.4.3"
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",

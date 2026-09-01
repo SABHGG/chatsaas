@@ -37,6 +37,16 @@ const publishBodySchema = z
     plan_id: z.string().min(1),
   })
 
+// zod 4.5.4 AOT compile: these are the FINAL body schemas (nothing derives
+// from them afterwards), so compiling the clones is safe. Compiled once at
+// module load — not per request — to keep Lambda cold-start cost bounded.
+// The originals stay uncompiled; z.compile returns a clone with the same
+// type, and invalid bodies fall back to the runtime parser with identical
+// ZodError reporting (the 400 handler below is unaffected).
+const CompiledCreateBody = z.compile(createBodySchema)
+const CompiledPatchBody = z.compile(patchBodySchema)
+const CompiledPublishBody = z.compile(publishBodySchema)
+
 interface PluginOpts {
   preHook: UserPreHook
   chatbotsTable: string
@@ -387,7 +397,7 @@ const chatbotsPlugin: FastifyPluginAsync<PluginOpts> = async (fastify, opts) => 
             code: claims ? 'MISSING_COMPANY' : 'UNAUTHENTICATED',
           })
       }
-      const parsed = createBodySchema.safeParse(request.body)
+      const parsed = CompiledCreateBody.safeParse(request.body)
       if (!parsed.success) {
         throw parsed.error
       }
@@ -444,7 +454,7 @@ const chatbotsPlugin: FastifyPluginAsync<PluginOpts> = async (fastify, opts) => 
           })
       }
       const { id } = request.params as { id: string }
-      const parsedPatch = patchBodySchema.safeParse(request.body)
+      const parsedPatch = CompiledPatchBody.safeParse(request.body)
       if (!parsedPatch.success) {
         throw parsedPatch.error
       }
@@ -567,7 +577,7 @@ const chatbotsPlugin: FastifyPluginAsync<PluginOpts> = async (fastify, opts) => 
       const { chatbotId } = request.params as { chatbotId: string }
       // Validate the body BEFORE any data access: an invalid publish request
       // must cost zero reads and return 400 (see chatbots.test.ts).
-      const parsedPublish = publishBodySchema.safeParse(request.body)
+      const parsedPublish = CompiledPublishBody.safeParse(request.body)
       if (!parsedPublish.success) {
         throw parsedPublish.error
       }

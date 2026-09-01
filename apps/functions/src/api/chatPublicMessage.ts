@@ -36,6 +36,14 @@ const chatBodySchema = z
   .strict()
 type ChatBody = z.infer<typeof chatBodySchema>
 
+// zod 4.5.4 AOT compile: this is the FINAL body schema (nothing derives from
+// it), compiled once at module load — not per request — to keep Lambda
+// cold-start cost bounded. Inference stays on the original schema; the
+// compiled clone is only used at the parse site below. Invalid bodies fall
+// back to the runtime parser with identical ZodError reporting, so the 400
+// contract is unchanged.
+const CompiledChatBody = z.compile(chatBodySchema)
+
 const CREDIT_COST_PER_CONVERSATION = 1
 
 export interface ChatRouteEnv {
@@ -159,7 +167,7 @@ const chatPublicMessagePlugin: FastifyPluginAsync<{ env: ChatRouteEnv }> = async
       // rejected with 400 before anything else runs.
       let body: ChatBody
       try {
-        body = chatBodySchema.parse(request.body)
+        body = CompiledChatBody.parse(request.body)
       } catch (err) {
         if (err instanceof z.ZodError) {
           return reply
