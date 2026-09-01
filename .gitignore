@@ -62,3 +62,8 @@ swagger-docs.json
 next-env.d.ts
 # Local Pi runtime state
 .atl/
+
+# Local tool/skill installs (per-machine, not project code)
+.agents/
+.pi/
+.codex/
