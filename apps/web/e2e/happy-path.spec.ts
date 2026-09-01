@@ -123,8 +123,10 @@ test('operator plugs in a new line end to end', async ({ page }) => {
   await expect(pluggedJack).toHaveAttribute('data-line-state', 'live')
   await expect(pluggedJack.locator('[data-testid="jack-body"]')).toHaveClass(/bg-patch-amber/)
 
-  // The draft is spent and the operator lands on the detail page.
-  await page.waitForURL(/\/board\/chatbots\/[^/]+$/, { timeout: 10_000 })
+  // The draft is spent and the operator lands on the board with the new
+  // line selected in the pane — `?line=<id>` (the old detail route
+  // redirects into the pane selection).
+  await page.waitForURL(/\/board\?line=/, { timeout: 10_000 })
   const detailJack = page.getByTestId('chatbot-detail-header').getByTestId('jack-card')
   await expect(detailJack).toHaveAttribute('data-line-state', 'live')
   await expect(page.getByTestId('embed-snippet')).toBeVisible()

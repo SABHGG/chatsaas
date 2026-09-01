@@ -5,19 +5,20 @@ import { creditBalanceSchema } from '@/lib/api-schemas'
 import { proxyRequest } from '@/lib/bff-request'
 import { ApiError, asApiError } from '@/lib/api-errors'
 import { useHydrated } from '@/lib/use-hydrated'
-import { ALMOST_OUT_LABEL, ON_HOLD_LABEL, UsageMeter, meterStatus } from './usage-meter'
+import { ALMOST_OUT_LABEL, ON_HOLD_LABEL, meterStatus } from './usage-meter'
 
 /**
- * The usage-meter slot in the board header (WI-007 Task 12 layout):
- * fetches the prepaid credit balance through the BFF proxy once the
- * component is hydrated (DC-007-5 — the slot never reads server state
- * that could differ across the boundary) and renders the shared
- * presentational meter with it.
+ * The compact credits pill in the board header (WI-007 Task 12 layout,
+ * Index Rail revision): fetches the prepaid credit balance through the
+ * BFF proxy once the component is hydrated (DC-007-5 — the pill never
+ * reads server state that could differ across the boundary).
  *
- * Data honesty: the API contract today exposes only the prepaid balance
- * (`GET /api/credits/balance`); there is no current-plan usage endpoint,
- * so the plan channel stays empty until the backend adds one. A 429
- * renders the line-vocabulary 'On hold' through the shared meter.
+ * Rehomed meter: on the board, the full usage meter now lives at the
+ * rail's foot (RailUsage). This header pill covers the below-lg sizes —
+ * where the rail collapses to a horizontal strip — so the operator's
+ * credits position stays in the first viewport. It mirrors the meter's
+ * status ladder exactly (same inputs, same verdict) so the two surfaces
+ * can never disagree. A 429 renders the line-vocabulary 'On hold'.
  */
 export function UsageSlot() {
   const hydrated = useHydrated()
@@ -54,19 +55,11 @@ export function UsageSlot() {
   }
 
   return (
-    <>
-      <div data-testid="usage-slot" className="hidden w-64 shrink-0 md:block">
-        <UsageMeter monthlyLimit={0} used={0} prepaidBalance={balance} error={error} />
-      </div>
-      {/* Small screens: the meter card is hidden below md, so the credits
-          position rides the header as a compact ink pill (flat, no shadow)
-          — the operator's credits state stays in the first viewport. */}
-      <span
-        data-testid="usage-slot-compact"
-        className="inline-flex shrink-0 items-center rounded-plate bg-slate-ink px-2.5 py-1 font-mono text-xs uppercase tracking-plate text-operators-ivory md:hidden"
-      >
-        {pillText}
-      </span>
-    </>
+    <span
+      data-testid="usage-slot-compact"
+      className="inline-flex shrink-0 items-center rounded-plate bg-slate-ink px-2.5 py-1 font-mono text-xs uppercase tracking-plate text-operators-ivory lg:hidden"
+    >
+      {pillText}
+    </span>
   )
 }

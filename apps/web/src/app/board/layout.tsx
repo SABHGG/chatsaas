@@ -4,11 +4,13 @@ import { OperatorProvider } from '@/components/operator-context'
 import { UsageSlot } from '@/components/usage-slot'
 
 /**
- * The board shell (WI-007): product name, the usage-meter slot, and the
- * panel nav — shared by "Your lines", the wizard, detail, and the plan
- * page. The layout is a Server Component; the meter slot is a client
- * island that fetches its own balance through the BFF proxy after
- * hydration (DC-007-5).
+ * The board shell (WI-007, redesigned per the locked direction
+ * "The Index Rail"): a compact engraved-plate header — product name and
+ * the board name, no tagline clutter — shared by the board, the wizard,
+ * and the plan page. The usage meter lives at the rail's foot on the
+ * board itself (RailUsage); below lg, where the rail collapses to a
+ * strip, the credits pill and the plan link ride this header instead.
+ * The layout is a Server Component.
  */
 export default async function BoardLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession()
@@ -16,38 +18,36 @@ export default async function BoardLayout({ children }: { children: React.ReactN
   return (
     <OperatorProvider operatorId={session.sub}>
       <header className="border-b border-hairline-slate bg-operators-ivory">
-        {/* Mobile rows are tight: the compact credits pill shares this row
-            below sm, so the gaps tighten until there is room for it. */}
-        <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-6 py-4 sm:gap-6">
+        <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-6 py-4 sm:gap-4">
           <Link
             href="/board"
-            className="font-mono text-sm font-semibold uppercase tracking-plate text-slate-ink"
+            className="min-w-0 font-mono text-sm font-semibold uppercase tracking-plate text-slate-ink hover:text-slate-ink/70"
           >
             chatSaaS
           </Link>
-          <span
-            aria-hidden
-            className="hidden font-mono text-xs uppercase tracking-plate text-slate-ink/70 sm:block"
-          >
-            Operator&rsquo;s Board
-          </span>
 
-          <nav aria-label="Board" className="ml-auto flex items-center gap-3 sm:gap-6">
-            <Link
-              href="/board"
-              className="font-mono text-xs uppercase tracking-plate text-slate-ink hover:text-slate-ink/70"
-            >
-              Your lines
-            </Link>
+          {/* Engraved divider, then the board name as its plate. Below sm
+              the plate stands down: on a phone width the wordmark plus
+              the credits pill are the load-bearing marks, and the pill
+              must always clear the right gutter (min-w-0 lets the
+              shrinkable children yield instead of clipping it). */}
+          <span aria-hidden className="hidden h-4 w-px bg-hairline-slate sm:block" />
+          <p className="hidden min-w-0 font-mono text-xs font-medium uppercase tracking-plate text-slate-ink sm:block">
+            Operator&rsquo;s Board
+          </p>
+
+          {/* Below lg the rail collapses to a strip: the plan link and
+              the compact credits pill ride the header so the operator's
+              state stays in the first viewport. */}
+          <nav aria-label="Board" className="ml-auto flex min-w-0 items-center gap-3 sm:gap-4 lg:hidden">
             <Link
               href="/board/plan"
               className="font-mono text-xs uppercase tracking-plate text-slate-ink hover:text-slate-ink/70"
             >
               Plan
             </Link>
+            <UsageSlot />
           </nav>
-
-          <UsageSlot />
         </div>
       </header>
 

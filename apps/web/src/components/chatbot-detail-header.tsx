@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { proxyRequest } from '@/lib/bff-request'
 import { ApiError } from '@/lib/api-errors'
 import { lineStateFromStatus, planPriceLabel, publishResponseSchema, type Plan } from '@/lib/api-schemas'
-import { LineStatePill } from './line-state-pill'
 import { JackCard } from './jack-card'
 import { DIALOG_CANCEL_CLASS, DIALOG_INK_CLASS, DIALOG_PRIMARY_CLASS, Dialog } from './dialog'
 import { z } from 'zod'
@@ -96,14 +95,9 @@ export function ChatbotDetailHeader({ chatbotId, name, status, plans }: ChatbotD
 
   return (
     <div data-testid="chatbot-detail-header">
-      <div className="flex items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <JackCard name={name} lineState={lineState} justPlugged={justPlugged} />
-        </div>
-        <div className="shrink-0">
-          <LineStatePill state={lineState} />
-        </div>
-      </div>
+      {/* The jack card owns the state pill on its trailing edge — exactly
+          one pill, never a second beside it. */}
+      <JackCard name={name} lineState={lineState} justPlugged={justPlugged} />
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         {!isLive && (

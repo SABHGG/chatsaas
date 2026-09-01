@@ -212,11 +212,12 @@ describe('DC-007-2 — publishing with 0 ready documents is gated behind the dia
       ),
     )
 
-    // The plug moment: the lit jack plays the ONE patch-cord click.
+    // The plug moment: the lit jack plays the ONE patch-cord click —
+    // Motion's spring, remounted from scale 0.6 on the plugged screen.
     await waitFor(() => {
       const jack = document.querySelector('[data-testid="jack-body"]') as HTMLElement
       expect(jack.className).toContain('bg-patch-amber')
-      expect(jack.className).toContain('animate-jack-click')
+      expect(jack.style.transform).toContain('scale')
     })
 
     // The operator lands on the detail page with the line visibly live.

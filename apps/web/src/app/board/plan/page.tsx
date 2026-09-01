@@ -42,7 +42,15 @@ export default async function PlanPage() {
 
   return (
     <section aria-label="Plan and credits">
-      <h1 className="text-3xl font-semibold tracking-tight text-slate-ink">Plan &amp; credits</h1>
+      {/* The rail's plan link brought the operator here; give the quiet
+          way back at the top (the header nav below lg rides the strip). */}
+      <Link
+        href="/board"
+        className="inline-block font-mono text-xs uppercase tracking-plate text-slate-ink hover:text-slate-ink/70"
+      >
+        Back to the board
+      </Link>
+      <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-ink">Plan &amp; credits</h1>
       <p className="mt-2 max-w-lg text-sm leading-relaxed text-slate-ink/70">
         Every conversation costs one credit. The plan covers the month; prepaid credits keep you
         live past it.
