@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { Tooltip } from '@base-ui-components/react/tooltip'
 import { buildIframeSnippet, copyToClipboard } from '@/lib/embed'
 
 /**
@@ -66,14 +67,31 @@ export function EmbedSnippet({ url }: { url: string }) {
       />
 
       <div className="mt-3 flex items-center gap-3">
-        <button
-          type="button"
-          data-testid="embed-copy"
-          onClick={() => void onCopy()}
-          className="rounded-plug bg-slate-ink px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-plate text-operators-ivory hover:bg-slate-ink/90"
-        >
-          Copy snippet
-        </button>
+        {/* The one tooltip on the board (Base UI, in-world: ink ground,
+            ivory mono text, no shadow) — naming the copy control's job.
+            The trigger IS the copy button, so the DOM and testid stay. */}
+        <Tooltip.Provider>
+          <Tooltip.Root>
+            <Tooltip.Trigger
+              type="button"
+              data-testid="embed-copy"
+              onClick={() => void onCopy()}
+              className="rounded-plug bg-slate-ink px-5 py-2.5 font-mono text-xs font-semibold uppercase tracking-plate text-operators-ivory hover:bg-slate-ink/90"
+            >
+              Copy snippet
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Positioner sideOffset={8}>
+                <Tooltip.Popup
+                  data-testid="embed-copy-tooltip"
+                  className="rounded-plate bg-slate-ink px-2.5 py-1.5 font-mono text-xs uppercase tracking-plate text-operators-ivory"
+                >
+                  Copy embed code
+                </Tooltip.Popup>
+              </Tooltip.Positioner>
+            </Tooltip.Portal>
+          </Tooltip.Root>
+        </Tooltip.Provider>
         <span aria-live="polite" data-testid="embed-copied" className="font-mono text-xs uppercase tracking-plate text-slate-ink/70">
           {copied ? 'Copied.' : ''}
         </span>

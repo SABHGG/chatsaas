@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useRef, type ReactNode } from 'react'
+import { Dialog as BaseDialog } from '@base-ui-components/react/dialog'
+import type { ReactNode } from 'react'
 
 /**
  * The in-world dialog (DC-007-2, DC-007-3): a dimmed panel over the
@@ -10,6 +11,12 @@ import { useEffect, useRef, type ReactNode } from 'react'
  * border. No colored accents — the panel is ivory, the actions are ink,
  * and amber appears only if the caller marks an action as the primary
  * publish control.
+ *
+ * Built on Base UI's headless Dialog: Escape, backdrop dismissal, focus
+ * handling, and the aria wiring are the primitive's job now — the
+ * hand-rolled keyboard listener is gone. The public API (open/onClose/
+ * title/children/actions) and the world styling are unchanged; the testids
+ * survive on the primitive's own elements.
  */
 export interface DialogProps {
   open: boolean
@@ -21,45 +28,30 @@ export interface DialogProps {
 }
 
 export function Dialog({ open, onClose, title, children, actions }: DialogProps) {
-  const panelRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    // Focus lands on the panel so Escape and screen readers start here.
-    panelRef.current?.focus()
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
-  }, [open, onClose])
-
-  if (!open) return null
-
   return (
-    <div
-      data-testid="dialog-overlay"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-ink/40 p-6"
-      onClick={onClose}
+    <BaseDialog.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose()
+      }}
     >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        tabIndex={-1}
-        data-testid="dialog-panel"
-        onClick={(event) => event.stopPropagation()}
-        className="w-full max-w-md rounded-card border border-hairline-slate bg-panel-warm p-6 outline-none"
-      >
-        <h2 className="font-mono text-sm font-semibold uppercase tracking-plate text-slate-ink">
-          {title}
-        </h2>
-        <div className="mt-3 text-sm leading-relaxed text-slate-ink/80">{children}</div>
-        <div className="mt-6 flex items-center justify-end gap-3">{actions}</div>
-      </div>
-    </div>
+      <BaseDialog.Portal>
+        <BaseDialog.Backdrop
+          data-testid="dialog-overlay"
+          className="fixed inset-0 z-50 bg-slate-ink/40"
+        />
+        <BaseDialog.Popup
+          data-testid="dialog-panel"
+          className="fixed left-1/2 top-1/2 z-50 w-[calc(100%_-_3rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-card border border-hairline-slate bg-panel-warm p-6 outline-none"
+        >
+          <BaseDialog.Title className="font-mono text-sm font-semibold uppercase tracking-plate text-slate-ink">
+            {title}
+          </BaseDialog.Title>
+          <div className="mt-3 text-sm leading-relaxed text-slate-ink/80">{children}</div>
+          <div className="mt-6 flex items-center justify-end gap-3">{actions}</div>
+        </BaseDialog.Popup>
+      </BaseDialog.Portal>
+    </BaseDialog.Root>
   )
 }
 

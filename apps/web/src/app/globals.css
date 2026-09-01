@@ -91,12 +91,12 @@
     caret-color: var(--color-slate-ink);
   }
 
-  /* Focus is ink on ivory — never the blue SaaS default. */
+  /* Focus is ink on ivory — never the blue SaaS default. The radius
+     falls back to the 6px plate step. */
   :focus-visible {
     outline: 2px solid var(--color-slate-ink);
     outline-offset: 2px;
-    /* Fallback: v4 may inline scalar radius tokens instead of emitting the var. */
-    border-radius: var(--radius-plate, 6px);
+    border-radius: var(--radius-plate);
   }
 
   /* Browser surfaces carry the design too (craft floor). */
