@@ -3,7 +3,7 @@ type: feature
 id: WI-005
 title: "Ingest pipeline: S3 event → parsers → Bedrock Titan embeddings → pgvector"
 knowledge_level: K2
-status: ready
+status: completed
 phase: now
 branch: feature/WI-005-ingest-pipeline
 initiative: "RM-001"

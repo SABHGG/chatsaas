@@ -3,8 +3,9 @@ type: feature
 id: WI-001
 title: "Define public chatbot creation and publishing"
 knowledge_level: K2
-status: ready
+status: completed
 phase: now
+branch: feature/WI-006-retrieval-chat
 initiative: "RM-001"
 domains:
   - "Public Chatbot Delivery"

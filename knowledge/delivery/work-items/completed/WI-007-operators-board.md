@@ -3,9 +3,9 @@ type: feature
 id: WI-007
 title: "Operator's Board: app router, jose auth, 4-step wizard, dashboard, meters, publish/unpublish, iframe generator"
 knowledge_level: K2
-status: draft
+status: completed
 phase: now
-branch: feature/post-wi-003-rag-infra
+branch: feature/WI-007-operators-board
 initiative: "RM-001"
 created_at: "2026-08-28"
 source: post-wi-003-decisions

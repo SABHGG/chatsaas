@@ -21,6 +21,8 @@ risks:
   - "RDS Proxy IAM auth is the default path; password auth is left as a fallback for the local dev variant."
   - "Local dev without a real Aurora cluster is out of scope. Tests use CDK assertions against the synthesized template, not against a live cluster."
   - "Secrets Manager rotation is wired but the rotation Lambda is a placeholder — the actual rotation hook is left for a follow-up WI."
+  - "**DEPLOY BLOCKER (Judgment Day 2026-09-01, target b885002870bd8a6d)**: `infra/lib/aurora-pgvector.ts` instantiates `ServerlessCluster` (Aurora Serverless **v1**, synthesized EngineMode `serverless`) with engine `AuroraPostgresEngineVersion.VER_16_4` — v1 supports only PostgreSQL 10.x, so RDS rejects the cluster at deploy time. The WI targets Serverless **v2**; the construct must be migrated (and the 'Aurora Serverless v2' docstrings made true)."
+  - "**DEPLOY BLOCKER (Judgment Day 2026-09-01, target b885002870bd8a6d)**: `infra/lib/security-groups.ts` LambdaSG (`allowAllOutbound: false`) only permits 5432 egress to the proxy SG, but every Lambda attached to it (embeddings table/index custom resources, Ingest, rotation) also needs HTTPS 443 outbound for RDS Data API, S3, DynamoDB and Bedrock — runtime egress timeouts as synthesized today."
 dependencies:
   - "WI-002 (completed) — establishes the Fastify handler pattern the API layer will follow."
   - "WI-003 (completed) — establishes the Cognito JWT verifier pattern and the server bootstrap shape."

@@ -3,9 +3,9 @@ type: feature
 id: WI-006
 title: "Retrieval + chat handler: pgvector query → Bedrock Claude completion → metering + persist"
 knowledge_level: K2
-status: draft
+status: completed
 phase: now
-branch: feature/post-wi-003-rag-infra
+branch: feature/WI-006-retrieval-chat
 initiative: "RM-001"
 created_at: "2026-08-28"
 source: post-wi-003-decisions
@@ -153,3 +153,7 @@ All decision candidates for this WI are resolved (2026-08-28). The WI is eligibl
 - **WI-004 → WI-005 → WI-006** (linear spine; this WI is the reader).
 - **WI-006 → WI-007**: the frontend's public widget consumes this endpoint; also the admin "test your chatbot" preview hits the same route with a JWT-aware variant later (out of scope here).
 - **WI-008** is orthogonal here (anonymous public path) but required by WI-007.
+
+## Out-of-scope follow-ups (from Judgment Day, target b885002870bd8a6d, 2026-09-01)
+
+- **persistTurn sort-key collision (WARNING, single judge, base-only)**: each turn writes the user and assistant message rows with the SAME `createdAt` timestamp, so on the `(conversationId, createdAt)` key of `wi006-messages` the assistant Put overwrites the user row and `loadHistory` sees one row per turn. Fix needs distinct sort keys (e.g. `createdAt#role` or a monotonic suffix). Pre-existing HEAD code, observable through the sandbox table this WI created.

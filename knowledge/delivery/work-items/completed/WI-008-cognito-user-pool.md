@@ -3,7 +3,7 @@ type: feature
 id: WI-008
 title: "Cognito User Pool provisioning via CDK"
 knowledge_level: K2
-status: ready
+status: completed
 phase: now
 branch: feature/WI-008-cognito-user-pool
 initiative: "RM-001"
@@ -500,3 +500,7 @@ Modify:
 - **WI-005** (planned) — Bedrock Knowledge Base wiring + ingest pipeline. Depends on WI-008 because the ingest pipeline's per-document tenant scoping uses `custom:company_id` from the user's JWT.
 - **WI-006** (planned) — apps/web/ Next.js frontend (login + dashboard). Depends on WI-008 because the frontend's hosted-UI OAuth code + PKCE flow consumes `UserPoolDomain`, `UserPoolClientId`, and the callback URLs from this WI's stack outputs.
 - **WI-007** (planned) — API stack wiring (Fastify + Lambda + API Gateway HTTP API) that consumes the Cognito stack outputs as env vars (`COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `COGNITO_REGION`). Depends on WI-008 because the Fastify server bootstrap (WI-003) reads these env vars to construct the JWKS URL.
+
+## Out-of-scope follow-ups (from Judgment Day, target b885002870bd8a6d, 2026-09-01)
+
+- **Pre-token-generation admin gate can never pass (WARNING, pre-existing)**: `hasTotpMfa` reads `cognito:mfa_enabled`, an attribute Cognito does not expose to the Pre-Token Generation event, so every admin-group token issuance throws even for TOTP-enrolled users; the `cognito:groups` array override also fights the aws-lambda typing. Latent while `MfaConfiguration: OFF` and the admin allowlist is empty.
