@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 
 /**
@@ -20,9 +21,22 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
  * finished processing so the happy path can publish without the
  * DC-007-2 zero-ready dialog (that gate is covered by unit tests).
  *
+ * WI-009 public chat surface (observed apps/functions shapes):
+ *   GET  /api/public/chatbots/:id/config  published config | 404
+ *   POST /api/public/chat/:id/message     { message, conversation_id? } →
+ *                                         { data: { answer, conversation_id, sources[] } }
+ *                                         400 · 402 plan/credits · 404 unpublished · 429
+ *
+ *   The visitor surface is ANONYMOUS and CROSS-ORIGIN (the app on :4310
+ *   calls this mock on :4311 directly), so public routes carry permissive
+ *   CORS headers and answer the preflight. Message sentinels (mock-only):
+ *   '__plan_limit__' → 402, '__rate_limit__' → 429.
+ *
  * `GET /api/_requests` exposes every received request (method, path and
  * the two security headers) so the e2e can assert that the CSRF header
  * and the Bearer token actually crossed the BFF proxy.
+ * `GET /api/_public-messages` exposes the anonymous message log so the
+ * e2e can prove conversation_id continuation.
  */
 
 const PORT = Number(process.env.E2E_API_PORT ?? 4311)
@@ -124,6 +138,16 @@ interface CapturedRequest {
 
 const capturedRequests: CapturedRequest[] = []
 
+/** The anonymous visitor message log (WI-009 e2e introspection). */
+interface CapturedMessage {
+  chatbotId: string
+  message: string
+  conversation_id: string | null
+  response_conversation_id: string
+}
+
+const capturedMessages: CapturedMessage[] = []
+
 function chatbotDto(row: ChatbotRow) {
   return {
     id: row.id,
@@ -180,6 +204,10 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   }
   if (method === 'GET' && path[0] === '_requests') {
     json(res, 200, { requests: capturedRequests })
+    return
+  }
+  if (method === 'GET' && path[0] === '_public-messages') {
+    json(res, 200, { messages: capturedMessages })
     return
   }
 
@@ -307,6 +335,113 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
         .filter((doc) => doc.chatbotId === row.id)
         .sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1))
       json(res, 200, { success: true, data: { documents: rows } })
+      return
+    }
+  }
+
+  // WI-009 public chat surface. Anonymous and cross-origin: permissive
+  // CORS + preflight, and no credential of any kind is checked.
+  if (path[0] === 'public') {
+    res.setHeader('access-control-allow-origin', '*')
+    if (method === 'OPTIONS') {
+      res.setHeader('access-control-allow-methods', 'GET, POST, OPTIONS')
+      res.setHeader('access-control-allow-headers', 'content-type, accept')
+      res.writeHead(204)
+      res.end()
+      return
+    }
+
+    // GET /api/public/chatbots/:chatbotId/config
+    if (method === 'GET' && path[1] === 'chatbots' && path[3] === 'config') {
+      const row = chatbots.find((candidate) => candidate.id === path[2])
+      if (!row || row.status !== 'published') {
+        // 404 (never 403): existence of unpublished bots is not leaked.
+        json(res, 404, { success: false, error: 'Chatbot not found', code: 'CHATBOT_NOT_FOUND' })
+        return
+      }
+      json(res, 200, {
+        success: true,
+        data: { chatbotId: row.id, name: row.name, status: 'published', expires_at: null },
+      })
+      return
+    }
+
+    // POST /api/public/chat/:chatbotId/message
+    if (method === 'POST' && path[1] === 'chat' && path[3] === 'message') {
+      const chatbotId = path[2] ?? ''
+      const raw = await readBody(req)
+      let body: { message?: unknown; conversation_id?: unknown } = {}
+      try {
+        body = JSON.parse(raw.toString('utf8') || '{}') as typeof body
+      } catch {
+        json(res, 400, {
+          error: 'Validation failed',
+          details: 'Invalid JSON body',
+          path: url.pathname,
+          timestamp: new Date().toISOString(),
+        })
+        return
+      }
+      const row = chatbots.find((candidate) => candidate.id === chatbotId)
+      if (!row || row.status !== 'published') {
+        json(res, 404, { error: 'Chatbot not found', path: url.pathname, timestamp: new Date().toISOString() })
+        return
+      }
+      if (typeof body.message !== 'string' || body.message.length === 0 || body.message.length > 2000) {
+        json(res, 400, {
+          error: 'Validation failed',
+          details: 'message must be 1..2000 chars',
+          path: url.pathname,
+          timestamp: new Date().toISOString(),
+        })
+        return
+      }
+      const conversationId =
+        typeof body.conversation_id === 'string' && body.conversation_id.length > 0
+          ? body.conversation_id
+          : // The real backend (chatPublicMessage.ts) mints a UUID; the client pins
+            // z.string().uuid(), so the mock must emit a parseable one.
+            randomUUID()
+      capturedMessages.push({
+        chatbotId,
+        message: body.message,
+        conversation_id: typeof body.conversation_id === 'string' ? body.conversation_id : null,
+        response_conversation_id: conversationId,
+      })
+      if (body.message === '__plan_limit__') {
+        json(res, 402, {
+          error: 'monthly_limit_exhausted',
+          details: null,
+          path: url.pathname,
+          timestamp: new Date().toISOString(),
+        })
+        return
+      }
+      if (body.message === '__rate_limit__') {
+        json(res, 429, {
+          error: 'rate_limited',
+          path: url.pathname,
+          timestamp: new Date().toISOString(),
+        })
+        return
+      }
+      const answer = typeof body.conversation_id === 'string'
+        ? 'Continuing our chat — our cortado is 4.00, and the cold brew is 5.00.'
+        : 'Our flat white is 4.50. Anything else about the menu?'
+      json(res, 200, {
+        data: {
+          answer,
+          conversation_id: conversationId,
+          sources: [
+            {
+              id: 'chunk-menu-1',
+              content: 'Flat white — 4.50\nCortado — 4.00\nCold brew — 5.00',
+              score: 0.92,
+            },
+            { id: 'chunk-menu-2', content: 'Served all day at the counter.', score: 0.71 },
+          ],
+        },
+      })
       return
     }
   }

@@ -1,250 +1,403 @@
 ---
 name: chatSaaS
-description: Managed document-grounded AI chatbots — the operator's board.
-colors:
-  patch-amber: "#b8860b"
-  patch-amber-deep: "#8a6508"
-  operators-ivory: "#f8f4e9"
-  panel-warm: "#fdfbf4"
-  well-warm: "#ede7d3"
-  slate-ink: "#2d3142"
-  hairline-slate: "#d6d2c4"
-typography:
-  display:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.875rem"
-    fontWeight: 600
-    lineHeight: "2.25rem"
-    letterSpacing: "-0.025em"
-  headline:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.5rem"
-    fontWeight: 600
-    lineHeight: "2rem"
-    letterSpacing: "-0.025em"
-  title:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "1.25rem"
-    fontWeight: 600
-    lineHeight: "1.75rem"
-    letterSpacing: "-0.025em"
-  body:
-    fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
-    fontSize: "0.875rem"
-    fontWeight: 400
-    lineHeight: 1.625
-  label:
-    fontFamily: "IBM Plex Mono, ui-monospace, SFMono-Regular, monospace"
-    fontSize: "0.75rem"
-    fontWeight: 500
-    letterSpacing: "0.08em"
-    textTransform: "uppercase"
-rounded:
-  jack: "9999px"
-  plug: "9999px"
-  card: "14px"
-  plate: "6px"
-spacing:
-  sm: "8px"
-  md: "16px"
-  lg: "20px"
-  xl: "24px"
-  section: "40px"
-components:
-  plug-primary:
-    backgroundColor: "{colors.patch-amber-deep}"
-    textColor: "{colors.operators-ivory}"
-    typography: "{typography.label}"
-    rounded: "{rounded.plug}"
-    padding: "10px 20px"
-  plug-primary-hover:
-    backgroundColor: "#8a6508e6"
-  plug-ink:
-    backgroundColor: "{colors.slate-ink}"
-    textColor: "{colors.operators-ivory}"
-    typography: "{typography.label}"
-    rounded: "{rounded.plug}"
-    padding: "10px 20px"
-  plug-ink-hover:
-    backgroundColor: "#2d3142e6"
-  button-ghost:
-    backgroundColor: "{colors.panel-warm}"
-    textColor: "{colors.slate-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.plate}"
-    padding: "8px 16px"
-  card-jack:
-    backgroundColor: "{colors.panel-warm}"
-    textColor: "{colors.slate-ink}"
-    rounded: "{rounded.card}"
-    padding: "20px"
-  dialog-panel:
-    backgroundColor: "{colors.panel-warm}"
-    textColor: "{colors.slate-ink}"
-    rounded: "{rounded.card}"
-    padding: "24px"
-  pill-state:
-    backgroundColor: "transparent"
-    textColor: "{colors.slate-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.plate}"
-    padding: "4px 10px"
-  input-text:
-    backgroundColor: "{colors.panel-warm}"
-    textColor: "{colors.slate-ink}"
-    typography: "{typography.body}"
-    rounded: "{rounded.card}"
-    padding: "12px 16px"
+description: Managed document-grounded AI chatbots — the Flight-Strip Control Board.
+tokens:
+  source: "src/app/globals.css (shadcn variable set + flight-strip grammar layer, Tailwind v4 CSS-first)"
+  baseColor: neutral
+  cssVariables: true
+  ground: "#e8eaec (--background — cool rack-metal gray; the ground is not white)"
+  paper: "#fbfaf7 (--card — warm paper strips)"
+  ink: "#16181a (--foreground, --primary, --ring — near-black ink)"
+  stamp: "#c8331f (--stamp = --destructive — inscription red, the ONLY saturated color)"
+  radius: "0.125rem (--radius — squared, strip-like)"
+  darkMode: "variables declared, never activated (no dark toggle — explicit follow-up)"
+fonts:
+  sans: "Inter (next/font) → --font-sans (prose)"
+  mono: "IBM Plex Mono (next/font, 400/500/600) → --font-mono (LOAD-BEARING: every quantity, readout, stamp, and instrument label)"
 ---
 
-# Design System: chatSaaS — The Operator's Board
+# Design System: chatSaaS — the Flight-Strip Control Board
 
 ## Overview
 
-**Creative North Star: "The Operator's Board"**
+**Creative North Star: "The Flight-Strip Control Board"** — an ATC strip
+rack for chatbot lines. Every chatbot line is a paper strip clipped into
+a rack-metal board; pulling a strip opens its workspace beside the rack.
+The operator scans every line's state at a glance, works one line at a
+time, files new lines through a 4-step flight-plan wizard, and reads
+plan charges as tower entries.
 
-chatSaaS is a switchboard. The operator — a non-technical small-business owner — plugs a customer's question into their knowledge by connecting two jacks, and the line goes live. The managed infrastructure (the rack, the routing, the machines) is real but invisible; the operator only ever sees labeled jacks, a patch cord, and a lit line. The interface is a calm instrument panel: warm ivory ground, deep slate ink, and a single warm accent that appears only where a line is actually live. Every state reads instantly from the panel's own vocabulary — unplugged, connecting, live, on hold — never from jargon.
+The material world is three neutrals and one red: a cool rack-metal gray
+ground (`#e8eaec` via `--background`), warm paper strips (`#fbfaf7` via
+`--card`), near-black ink (`#16181a`), and inscription red (`#c8331f`,
+`--stamp`) reserved for the live stamp, the NEW LINE lever, and the
+destructive family. Nothing else is saturated. The foundation is still
+shadcn/ui on Tailwind v4 (CSS-first, tokens in `:root`, utilities via
+`@theme inline`); the flight-strip grammar layer sits at the foot of
+`globals.css` as shared component classes.
 
-This is a workhorse surface, not a spectacle. The visitor came to operate: create a chatbot from their documents, publish it to their site, and know exactly where they stand against their plan and credits. Density is generous and unhurried; nothing glitters except the moment a line goes live. The register is trustworthy, warm, and engineered to feel like a well-kept machine room rather than a startup dashboard. The build landed as committed, with two recorded adaptations: depth is carried by a two-step tonal layering (Panel Warm cards on the ivory ground, Well Warm for inset wells — Panel Warm `#FDFBF4`, Well Warm `#EDE7D3`), and amber gained a second, darker step (Patch Amber Deep `#8A6508`) because raw amber on ivory fails the 4.5:1 contrast floor for text and filled controls. Raw Patch Amber stays surface-only; Deep is the amber that speaks.
+IBM Plex Mono is load-bearing, not decorative: every quantity, readout,
+stamp, legend, and instrument label speaks in the typewriter voice.
+Inter carries prose. Corners are squared (`--radius: 0.125rem`).
 
 **Key Characteristics:**
-- One warm accent (amber) reserved for the live line; everything else stays achromatic.
-- Ivory/cream ground with deep slate ink — light, not dark, built for daytime office use (light scheme is pinned; no dark mode).
-- Inter for body and data; IBM Plex Mono labels with engraved-plate letter spacing (`0.08em`).
-- Two-step tonal layering instead of shadows: Panel Warm cards on the ivory ground, Well Warm wells; exactly one shadow in the system.
-- Generous rhythm and quiet density; the interface recedes until a line is live.
-- Every bot is a labeled jack on a board; states are line states, never status widgets.
+- State is carried by FORM — stamp, dash, doubling, HOLD bar — never by hue alone.
+- One saturated color (`--stamp #c8331f`), used at stamp scale, never as a field.
+- Mono for instruments, sans for prose; squared corners everywhere.
+- Depth is two soft lift shadows; no bevels, no faked physicality.
+- Exactly one moving light per surface (the connecting chase); one authored moment (the publish stamp press).
 
 ## Colors
 
-The palette is restrained by design: a warm neutral field with a single accent that is rationed to the active path. No secondary or tertiary accents — the system deliberately has one voice. Status is carried by the accent's *presence* (amber = live) and by line-state labels, never by introducing green/red.
+A cool-gray ground carrying warm paper, read through near-black ink, with
+one inscription red. The chart ramp is achromatic on purpose
+(`#c9cbc8 → #16181a`) — instrumentation never gets hue.
 
 ### Primary
-- **Patch Amber** (`#B8860B`): the patch-cord color, surface-only. Marks the live jack body, the live pill's dot and border, the stepper's current waypoint, and the live ring (the amber glow shadow on a lit jack). It is never text on ivory — raw amber is ~3:1 there. It is the rare color; its rarity is the point.
-- **Patch Amber Deep** (`#8A6508`): the text-safe amber, added during the finish review as the contrast fix. Raw amber fails the 4.5:1 floor on ivory, so every amber *label* and every filled primary control ground uses this darker step (live pill label, current-step label, the Plug control ground). It exists solely so amber can speak where ink would otherwise have to.
+- **Inscription Red — the stamp** (`#c8331f`, `--stamp`): the ONLY
+  saturated color. The live LIVE stamp, the embed label stamp, the NEW
+  LINE lever (`Button` `stamp` variant), and the destructive family
+  (`--destructive` is the same value; destructive buttons/badges ride
+  its 10–20% tints). Held lines read "on hold" through this family.
 
 ### Neutral
-- **Operator's Ivory** (`#F8F4E9`): the panel ground — the page background, the text on filled ink/amber controls, the pinhole inside every jack, and the selection foreground.
-- **Panel Warm** (`#FDFBF4`): the card surface — one bright step up from the ivory ground. Every card, dialog panel, input, and snippet box sits here.
-- **Well Warm** (`#EDE7D3`): the inset well — one step down from the ground. Meter and progress channels, the dropzone's drag-over ground, hover grounds for ghost buttons, and selected plan options.
-- **Slate Ink** (`#2D3142`): primary text, the unlit jack bodies, ink meter fills, the ink plug control, the selection background, the focus outline, and the dialog overlay (`40%` alpha).
-- **Hairline Slate** (`#D6D2C4`): borders and dividers — card outlines, the header rule, pill borders, the dropzone's dashed border, unwired stepper cords, and thin scrollbars.
+- **Rack-metal ground** (`#e8eaec`, `--background`): page ground. The
+  ground is NOT white — white would break the material read.
+- **Paper strip** (`#fbfaf7`, `--card`, `--popover`): every strip, panel,
+  dialog, and tray. Warm against the cool ground.
+- **Ink** (`#16181a`, `--foreground`/`--primary`/`--ring`): text, solid
+  controls, meter fills, focus rings, the HOLD bar, selection highlight
+  (`::selection` is ink with ground-colored text — inverted, not tinted).
+- **Paper-dim** (`#edece7`, `--secondary`; `#e4e4e0`, `--muted`;
+  `#f2f0ea`, `--accent`): quiet grounds, tracks, hover/selection washes.
+- **Quiet ink** (`#565a57`, `--muted-foreground`): secondary text.
+- **Hairline** (`#c9cbc8`, `--border`, `--input`): 1px edges everywhere.
 
 ### Named Rules
-**The Live Line Rule.** Patch Amber appears only on the line that is active: the lit jack of a published bot, the primary create/publish control, the create flow's current waypoint (the plug path — sanctioned by the WI-007 visual contract, Task 8), and the live pill. Raw amber is surface-only; amber as text is always Patch Amber Deep. If amber covers more than a small fraction of a screen, the design has drifted.
+**The One Stamp Rule.** `#c8331f` appears only at stamp/lever scale — a
+name-block, a badge, one button. Never as a background field, never on
+two live elements of the same kind on one surface: a surface shows at
+most one red LIVE stamp (strip or header, not both) and the rack shows
+red only for lines that are actually live.
+
+**The Ground Is Not White Rule.** Surfaces layer paper (`#fbfaf7`) on
+rack-metal (`#e8eaec`); anything still white is a migration bug.
 
 ## Typography
 
-**Display Font:** Inter (via `next/font`; fallback `ui-sans-serif, system-ui, sans-serif`)
-**Body Font:** Inter (same stack)
-**Label/Mono Font:** IBM Plex Mono, weights 400/500/600 (via `next/font`; fallback `ui-monospace, "SFMono-Regular", monospace`)
+**Body Font:** Inter (`--font-sans`) — the prose voice: explanations,
+descriptions, empty states, dialog copy.
+**Instrument Font:** IBM Plex Mono (`--font-mono`) — LOAD-BEARING: every
+quantity, readout, stamp, legend entry, and section mark.
 
-**Character:** A workhorse humanist sans for body and data that stays legible at small sizes, paired with a machined mono label voice — every label, plate, URL, and readout is letter-spaced uppercase IBM Plex Mono, the engraved plate of a machine room. Two voices only; there is no serif and no display face.
+**Character:** a typewriter strapped to a control tower. Inter keeps the
+operator's language humane; Plex Mono makes every instrument figure feel
+typed onto the strip.
 
 ### Hierarchy
-- **Display** (Inter 600, 30px/36px, tracking `-0.025em`): page titles — "Your lines", "Plan & credits" (`text-3xl font-semibold tracking-tight`).
-- **Headline** (Inter 600, 24px/32px, tracking `-0.025em`): the four wizard step titles — "Name the line", "Wire in documents", "Review the line", "Plug the line in" (`text-2xl font-semibold tracking-tight`).
-- **Title** (Inter 600, 20px/28px, tracking `-0.025em`): section subheads like the empty-board "No lines on the board yet" (`text-xl font-semibold tracking-tight`); card names inside dialogs drop to 16px/24px semibold (`text-base font-semibold`).
-- **Body** (Inter 400, 14px, relaxed 1.625 leading): helper text and descriptions, usually at 70–80% ink (`text-sm leading-relaxed text-slate-ink/70`); the plugged-in readout is 16px.
-- **Label** (IBM Plex Mono 500, 12px, letter-spacing `0.08em`, uppercase): jack names, field labels, pill and stepper labels, meter readouts (`tabular-nums` for numbers), nav links, format hints, and every button label. The product wordmark is the same voice one step up (14px, 600).
+- **Page title** (Inter, semibold, `text-3xl`/`text-2xl`, tight tracking): "Your lines", "Plan & credits", wizard step titles.
+- **Body** (Inter, 400, `text-sm`, relaxed leading): prose, helper copy (max-w constrained, ~md).
+- **Instrument label** (`.label-mono`: Plex Mono, 0.6875rem/1rem, letter-spacing 0.14em, uppercase): rack headers ("Lines"), section marks ("Plans", "Credits"), stamps, legend, lever copy.
+- **Readout** (`.readout-mono`: Plex Mono, `tabular-nums`, 0.6875rem–`text-sm`): every quantity — docs counts, fleet figures, credit balances, prices, upload %, the embed snippet.
 
 ### Named Rules
-**The Jack Label Rule.** Labels read like engraved plate: short, machine-precise, never sentence-long. A label that needs a paragraph is body copy, not a label.
+**The Typed Figure Rule.** If it is a quantity or a machine fact, it is
+mono (`.readout-mono`); if it is a section mark or stamp, it is
+`.label-mono`. Inter never renders a number that reads as instrumentation.
 
 ## Layout
 
-Desktop-first, built around one centered **64rem (`max-w-5xl`) column** with 24px side gutters. The shell is a compact engraved-plate header row — product wordmark, then from `sm` a 1px hairline divider and the "Operator's Board" plate — on the ivory ground over a 1px hairline bottom border, with 16px vertical padding; `main` carries 40px vertical padding. The board itself is the **Index Rail composition**: from `lg` a two-column split (`grid-cols-[16rem_1fr]`, 40px gap) — a **16rem index rail** where every line is a selectable index card (topped by an engraved "Lines" divider label carrying the fleet count), beside the selected line's **detail pane at full width**. Selection lives in the URL (`?line=<chatbotId>`), so deep links and the wizard's landing resolve straight into the pane; the old detail route (`/board/chatbots/[id]`) is a redirect into it, and an unknown or stale id falls back to the glance — the board never dead-ends. With no line selected the pane shows the fleet-at-a-glance summary ("Your lines" over a mono tabular readout: live / unplugged / documents wired), and the plug-in CTA row — a hairline rule with the primary Plug right-aligned — sits at the pane's foot, always reachable. Responsive behavior is narrow and deliberate: below `sm` (640px) the header plate stands down — the divider and board name hide, gaps tighten (16px → 12px), and `min-w-0` shrinkable children keep the credits pill clear of the right gutter; below `lg` (1024px) the index rail collapses to a **horizontal strip** — the card list becomes a full-bleed, horizontally scrolling row of fixed-width (176px) cards — the rail's divider label and foot meter stand down, and the Plan link and compact credits pill ride the header instead, so the operator's state stays in the first viewport. The guided create flow moves through four discrete steps (name → documents → review → publish), each occupying **the same fixed panel: `min-height: 26rem` (416px)** with footer controls pinned at its end, so nothing shifts between steps. Spacing rhythm is Tailwind's 4px base at recurring steps: 8px (tight gaps), 16px (card/component rhythm), 20px (card padding), 24px (dialog padding, gutters), 40px (section padding).
+- **Board** (`/board`): a two-column rack composition on lg+ —
+  `lg:grid-cols-[16rem_1fr]`, gap-10, inside `max-w-5xl`. The rack is
+  the left column; the selected strip's workspace fills the rest.
+  Below lg the rack collapses to a horizontal strip (the list scrolls
+  sideways) and the plan link + credits pill ride the header.
+- **Rack interior**: `label-mono` "Lines" header with a `readout-mono`
+  count; strips in a `flex-col gap-2` list on `bg-foreground/[0.03]`
+  with `border-x`; at the rack's foot the credits meter, the plan link,
+  and the sticky state legend (`sticky bottom-0` — it never moves).
+- **Wizard**: the stepper on top, then ONE fixed vertical panel
+  (`min-h-[26rem]`) — all four steps occupy the same space, nothing
+  shifts between steps.
+- **Header** (all board surfaces): compact bar — `chatSaaS` wordmark, a
+  vertical separator, `label-mono` "Operator's Board"; below lg the
+  Plan link and compact credits pill join it.
+- **Rhythm**: shell padding `px-6 py-10`; section stacks run `mt-8`/`mt-10` with `pt-6` rule lines above footers. The NEW LINE lever sits at the pane's foot, bottom-left.
 
 ## Elevation & Depth
 
-Depth is tonal, not cast. The system is **flat at rest** and layers the warm neutrals in two steps: Panel Warm (`#FDFBF4`) cards sit one bright step above the Operator's Ivory ground, and Well Warm (`#EDE7D3`) sits one warm step below it as the inset well for channels, drag-over states, hovers, and selections. The dialog separates with a 40% ink overlay and a hairline border — its panel carries no shadow of its own. There is exactly **one shadow in the system**, and it is the one moment of "rise": the lit jack at publish. Even the motion's shadow bloom lands on this same resting value. The rail's state lamps stay out of that vocabulary: a live line's index-card lamp is a plain amber dot with **no shadow** — the rise stays reserved to jacks, and the rail reads as a flat index even when a line on it is lit.
+Flat by default; depth is earned by two named soft shadows and nothing
+else. There are no drop-shadow utilities, no layered card stacks.
 
-### Shadow Vocabulary
-- **Live jack** (`box-shadow: 0 2px 12px 0 rgb(184 134 11 / 0.35)`, token `--shadow-live-jack`): the amber ring around a lit jack — the detail pane's header jack and the embed panel's live jack (the wizard's publish-step jack included). A 2px offset plus 12px blur, per the craft floor — never a flat halo. No other element may cast it — the rail's lamps included.
+- **`shadow-strip-pull`** (`0 10px 22px rgb(22 24 26 / 0.18), 0 2px 6px rgb(22 24 26 / 0.12)`): the selected strip pulled from the rack — paired with `lg:translate-x-2`, never rotation.
+- **`shadow-paper-lift`** (`0 14px 32px rgb(22 24 26 / 0.16), 0 3px 8px rgb(22 24 26 / 0.08)`): paper lifted off the desk — dialog panels.
 
 ### Named Rules
-**The Flat-by-Default Rule.** Surfaces are flat at rest. The only elevated moment in the system is the live jack at the moment a line is plugged in.
+**The Soft Lift Rule.** The only shadows in the system are the two named
+lifts above. Hard offset shadows, bevels, inner rims (outside
+`press-travel`'s active inset), and glossy highlights are banned —
+physicality is suggested by material and motion, never faked.
 
 ## Shapes
 
-Jack-and-plug geometry. Cards and panels are gently rounded rects (**14px**, token `radius-card`); controls that *act* — the plug, dialog buttons, the copy control — are perfect pills (**9999px**, tokens `radius-jack`/`radius-plug`); small plates — pills, chips, option rows, ghost buttons — take a tight **6px** (`radius-plate`). Every surface is outlined with a 1px hairline in Hairline Slate; the dropzone is the one dashed outline. The recurring silhouette is the circular jack: a 44px circle with a 12px ivory pinhole on the card, a 24px circle with a 6px pinhole on the embed panel, a 6px dot in the state pill, and 16px bordered waypoints on the stepper. Focus is **ink, never blue**: a 2px solid Slate Ink outline with 2px offset (radius falls back to the 6px plate step). Browser surfaces stay in-world: text selection is ink-on-ivory, scrollbars are thin hairline, and `color-scheme` is pinned to light.
+Everything is squared: `--radius: 0.125rem`, and the Tailwind radius
+scale is derived DOWN from it (`rounded-sm` = 0.075rem … `rounded-4xl`
+= 0.325rem) — even the "largest" corner reads as a clipped strip. Edges
+are 1px hairlines (`--border #c9cbc8`); emphasis edges darken toward ink
+(`border-foreground/40–70`) rather than thickening. Recurring geometry:
+the strip clip (a 1px-high ink bar at the top edge of every strip), the
+full-width HOLD bar, the 80% tick on the credits channel, and the small
+squared stepper waypoints. Scrollbars are thin and squared (`border-radius: 0`).
 
 ## Components
 
-### Buttons (the plug)
-- **Shape:** pill — the plug geometry (9999px); ghost actions take the 6px plate radius.
-- **Primary (the Plug):** Patch Amber Deep ground (`#8A6508`), Operator's Ivory text, mono label 12px semibold uppercase `0.08em`, padding 10px 20px (wizard's final step: 24px inline). Used only where a line is actually being plugged in: "Plug in a new line" on the board, the detail and wizard publish controls, dialog primary actions. Hover deepens to 90% opacity ground; disabled sits at 60% opacity.
-- **Ink plug:** Slate Ink ground, ivory text, same voice — the workhorse control (step continues, "Copy snippet", "Unplug", login). Hover: 90% opacity.
-- **Ghost / plate:** Panel Warm ground, hairline border, ink text, 8px × 16px padding — cancel, dismiss, "Go to plan", "Try again". Hover: Well Warm ground.
-- **Focus:** the global ink outline (2px solid, 2px offset). All labels are mono uppercase — buttons never speak in sentence case.
+### The state grammar (state by form)
 
-### Line-state pill
-- **Style:** transparent ground, hairline border, 6px plate radius, 4px × 10px padding, mono 12px uppercase `0.08em`, with a 6px state dot.
-- **State (the four-state line vocabulary, never status widgets):** **Live** — Patch Amber border, Patch Amber Deep label, raw amber dot (the only amber). **Connecting** — achromatic, pulsing 70% ink dot. **Unplugged / On hold** — achromatic, 40% ink dot. No green, no red: the accent's presence *is* the live signal.
+Four line states — `unplugged / connecting / live / on hold`
+(`LINE_STATE_LABELS` is the binding copy). Every state has a distinct
+FORM; hue is never the only carrier:
 
-### Index rail card
-- **Character:** the rail's unit — an index card, not a jack row. Every line renders as one: name plate plus state lamp, selectable in place.
-- **Shape:** 14px card radius, hairline border, 16px × 12px padding; fixed 176px wide in the below-`lg` strip, full width in the `lg` rail.
-- **Anatomy:** the state **lamp** — a plain 10px dot: unplugged = Slate Ink, connecting = pulsing 50% ink, live = Patch Amber, on hold = 40% ink — **no shadow even when live** (the rise stays on jacks; see Elevation); the line name as an engraved-plate mono label (14px medium uppercase, truncated). The lamp is decorative (`aria-hidden`); an `sr-only` line speaks name + state.
-- **Selection:** the selected card carries `aria-current` and flips to a **Slate Ink border on the Well Warm ground** — the system's selection treatment; unselected cards hover to Well Warm. Selecting navigates to `/board?line=<id>`. Color transitions run 150ms and stand down under `motion-reduce`.
+| State | Form | Where |
+| --- | --- | --- |
+| **live** | `.rule-doubled` (double underline under the name) + the red `bg-stamp` LIVE stamp, exactly one per surface | `IndexRailCard`, `JackCard`, embed label |
+| **connecting** | `.stamp-dashed` (1px dashed ink outline) + `.chase-pulse` (1.6s opacity pulse — the ONE moving light on any surface) | stamp slots while publish is in flight |
+| **unplugged** | the plain word in `text-muted-foreground` — no stamp at all | everywhere |
+| **on hold** | `.hold-bar` — a full-width ink bar crossing the strip (mono, 0.35em tracking, "HOLD") | strip, header panel, whole-board 429 surface |
 
-### Jack card
-The labeled jack row — the **detail pane's header** (and the wizard's publish step), not a board row: the rail carries index cards; the jack lives where the operator acts on a line.
-- **Corner Style:** 14px card radius. **Background:** Panel Warm over a 1px hairline border. **Shadow Strategy:** flat — see Elevation; the shadow lives on the jack, never the card. **Internal Padding:** 20px, 16px internal gaps.
-- **Anatomy:** the 44px circular jack on the leading edge (body per state: unplugged = Slate Ink, connecting = pulsing 50% ink, live = **Patch Amber + live-jack shadow**, on hold = 40% ink; the 12px ivory pinhole never changes color), the bot name as an engraved-plate mono label (14px medium uppercase, truncated), the line-state pill on the trailing edge, and an `sr-only` line reading name + state for screen readers.
-- **The just-plugged moment:** the card may play the patch-cord click (`--animate-jack-click`) exactly once — only on the card the operator just published, never on plain board renders.
+The `StateLegend` at the rack's foot is the fixed key: each swatch
+repeats the state's FORM (plain, dashed, stamp, bar). It is sticky and
+never moves. Controls carry engagement by form too: `.press-travel`
+depresses 1px with an inset shadow on `:active` (90ms) — a pressed
+control looks pressed. `prefers-reduced-motion` stops the chase,
+flattens press-travel, and turns the stamp press into an opacity fade.
 
-### Line-detail pane
-- **Character:** the selected line's full panel, always open beside the index — zero navigation: state, documents readiness, plug/unplug, and the embed once live.
-- **Header:** the **JackCard is the pane's only jack and only state pill** — the pill rides the jack card's trailing edge, never a second beside it. The just-plugged patch-cord click plays here (this is a publish moment); the controls row sits 16px below the card.
-- **Controls:** "Plug in" — the primary Plug (Patch Amber Deep, 20px × 10px padding, hover 90% ground, disabled 60%); "Unplug" — a pill-ghost on the plug geometry (Panel Warm ground, hairline border, hover Well Warm). Both mono uppercase.
-- **Documents readiness:** an engraved "Documents" plate header with a mono tabular readout to its right ("N of M documents ready", 70% ink); each document a 6px plate row (hairline border, Panel Warm, 16px × 12px padding) — mono filename (truncated), size readout in KB (mono 12px `tabular-nums`, 70% ink), status label (mono 12px uppercase). A 429 speaks the line vocabulary ("On hold — the board is holding document reads right now."); an empty list says the documents aren't wired in yet and points to the wizard's Documents step.
-- **Embed:** once the line is live, the EmbedSnippet panel opens below the documents section (40px gap).
-- **Data:** everything renders server-side from the board page; only the header's mutations (plug/unplug through the plan dialog) are a client island riding the BFF proxy.
+### Buttons (`ui/button.tsx`)
+- **Shape:** squared (`rounded-sm`), h-8 default; all variants carry `press-travel`.
+- **`default`** (ink `bg-primary`): primary actions — plug in, sign in, copy.
+- **`stamp`** (`bg-stamp`): the NEW LINE lever, `label-mono` copy — the only red control at rest.
+- **`outline`** (paper + hairline): cancel, unplug, retry. **`ghost`**: quiet navigation. **`secondary`**, **`destructive`** (stamp-red tint), **`link`** as shadcn defaults.
+- **Hover:** tone shifts (`/85`, `/90`) and washes — never elevation.
 
-### Usage meter
-- **Home:** on the board the meter lives at the **index rail's foot** (`lg` and up), hosted by the RailUsage island — see Rail usage meter below; below `lg` the compact pill covers.
-- **Style:** Panel Warm card, hairline border, 20px padding; mono "Credits" plate header; status surfaces appear as a bordered plate pill (hairline ink/30 border) to the header's right.
-- **The gauge channel:** an 8px-tall full-radius Well Warm well with a Slate Ink fill and a 1px ink/30 tick at the 80% mark — a gauge channel, not a SaaS progress bar. The fill stays ink at every level: this is instrumentation, not the live line.
-- **State:** used ≥ 80% → "Almost out of credits"; plan exhausted, zero prepaid balance, or a 429 from the API → "On hold" (the line vocabulary, exactly). Readouts are mono 12px `tabular-nums`; follow-up copy speaks in operator language ("Top up your plan to bring it back.").
+### Badges (`ui/badge.tsx`) — squared stamps
+Mono uppercase (`0.6875rem`, tracking 0.08em), h-5, `rounded-sm`.
+`default` = ink-solid word; `secondary` = paper-dim; `outline`/`ghost` =
+hairline word; `destructive` = stamp-red tint. The `LineStatePill` maps
+the line vocabulary onto these; ingest statuses (`LineDocuments`) stay
+quiet (`secondary`/`outline`).
 
-### Rail usage meter (the rail's foot)
-- **Character:** the company credits instrument, permanently on at the foot of the index rail — the operator's position stays in view without leaving the board.
-- **The island:** `RailUsage` hosts the UsageMeter card and owns the board's `usage-slot` testid — this island IS the board's usage slot now. It fetches the prepaid balance through the BFF proxy after hydration (the slot never reads server state that could differ across the boundary).
-- **Handoff:** `lg` and up only. Below `lg` the rail collapses to a strip and the header's compact pill takes over (see Compact credits pill).
+### Progress (`ui/progress.tsx`) — instrument channel
+Squared (`rounded-none`), h-1, hairline border, paper-dim track. The
+fill is ALWAYS achromatic ink (`indicatorClassName="bg-foreground"`) —
+wiring and credit metering are instrumentation, not the live line.
+`UsageMeter` adds the 80% boundary tick (a 1px ink mark) and speaks its
+status through badges/copy ("Almost out of credits", "On hold"), never color.
 
-### Stepper (the cord)
-- **Style:** four waypoints — name, documents, review, publish — joined by a 1px cord (`flex-1`). Waypoints are 16px circles with 2px borders: complete = ink-filled, **current = Patch Amber-filled** (the plug path; label in Patch Amber Deep), future = transparent with hairline border. The cord is ink once wired, hairline ahead. Labels: mono 12px uppercase.
+### Dialog (`ui/dialog.tsx` + board wrapper `components/dialog.tsx`)
+Paper panel (`bg-popover #fbfaf7`, `rounded-sm`, `shadow-paper-lift`)
+over a 20% ink veil; footer on `bg-secondary/60` behind a hairline.
+Every confirmation is this dialog — never `window.confirm`/`alert`.
+Public API `open/onClose/title/children/actions`; `dialog-overlay` /
+`dialog-panel` testids ride the primitive's own elements.
 
-### Dialog
-- **Style:** a full-screen 40% Slate Ink overlay over an in-world panel — never `window.confirm`, never a browser alert. Panel: `max-width: 28rem`, 14px radius, Panel Warm, hairline border, 24px padding, **no shadow** — separation comes from the overlay and the border (Flat-by-Default holds here too).
-- **Anatomy:** mono 14px semibold uppercase title; 14px relaxed body at 80% ink; actions right-aligned with 12px gaps using the shared button classes (ghost "Not now", primary Plug or ink plug). Escape closes; focus lands on the panel.
+### Flight strip (`components/index-rail-card.tsx`)
+The rack's unit: a `w-44` paper card (full-width in the lg rack) with
+the clip bar, the line name, a `readout-mono` `Docs <n>` readout, and
+the state row (stamp / dash+chase / plain word / HOLD bar). Selection =
+pulled: `border-foreground/70`, `shadow-strip-pull`, `lg:translate-x-2`,
+`aria-current`. Selection lives in the URL (`?line=<chatbotId>`).
 
-### File dropzone
-- **Style:** 14px radius, **dashed** hairline border, Panel Warm ground, centered, 24px × 40px padding; a visually-hidden file input keeps native keyboard focus and Enter/Space activation.
-- **State:** drag-over flips to an ink border on the Well Warm ground; uploading shows a mono "Uploading · N%" readout over an 8px Well Warm channel with an ink fill (wiring work — never amber); errors surface as operator-language alert text with a ghost "Try again" plate. Format hint: mono 12px at 60% ink ("PDF · DOCX · TXT · MD · up to 10 MB").
+### Record header (`components/jack-card.tsx`)
+The pulled strip's header: an 11-size stamp block (red LIVE / dashed
+chase / empty), the name with `.rule-doubled` when live, the state pill
+on the trailing edge, the HOLD bar when held. **Motion:** the ONE
+authored moment — on publish (`justPlugged`) the LIVE stamp presses on
+with a stiff spring (scale 0.6→1, stiffness 520). Never on resting renders.
 
-### Embed snippet
-- **Style:** the panel's live-line jack — a 24px Patch Amber circle with the live-jack shadow — beside a mono "Embed on your site" plate header; a read-only mono 12px snippet box (14px radius, hairline border, Panel Warm, 16px padding) that selects on focus.
-- **Behavior:** "Copy snippet" is an ink plug; copying is this panel's patch-cord moment — on a *successful* copy only, the little jack plays the click, a mono "Copied." readout appears (`aria-live`), and both settle after ~1.6s. Never animates for decoration.
+### Paper tray (`components/file-dropzone.tsx`)
+Paper on hairline; a dragged-over tray OPENS — `bg-accent` +
+`border-foreground` — instead of changing hue. Upload progress is a
+`readout-mono` % over the achromatic channel. Structured API errors
+render in operator language (429 → "On hold") with an outline retry.
 
-### Compact credits pill (small viewports)
-- **Style:** below `lg` — where the rail collapses to a strip and the meter stands down — the credits position yields to a compact ink pill in the header (`lg:hidden`): Slate Ink ground, ivory mono 12px uppercase label, 6px plate radius, 4px × 10px padding, flat (no shadow). The Plan link rides the header beside it on the same breakpoints. The pill mirrors the meter's status ladder exactly (`Credits: N`, `· Almost out of credits`, or `On hold`), so the two surfaces can never disagree.
+### Documents island (`components/line-documents.tsx`)
+The wired-in documents with ingest status words in quiet badges. While
+any document is `uploaded`/`processing` it polls on the 5s cadence
+(`INGEST_POLL_MS`) via `router.refresh()`; uploads refresh immediately.
+
+### Embed generator (`components/embed-snippet.tsx`)
+The live-line stamp rides the label; the iframe snippet sits in a
+`readout-mono` textarea on paper (select-on-focus); Copy is the board's
+only tooltip, and success is the typed readout "Copied." — no motion.
+
+### Credits instruments (`usage-meter.tsx`, `rail-usage.tsx`, `usage-slot.tsx`)
+The full meter lives at the rack's foot (`RailUsage`, `usage-slot`
+testid); below lg a compact header pill mirrors the exact same status
+ladder. 429 from the API IS the on-hold state.
+
+### Stepper (`components/stepper.tsx`)
+Squared waypoints (`size-3.5`, 2px border): current = ink fill,
+complete = ink/40, future = hairline; cords between sections solidify
+once filed; labels in `label-mono`.
+
+### Staged primitives
+`Card`, `Input`, `Label`, `Alert`, `Skeleton`, `DropdownMenu`, `Separator`
+(header divider) restyle from the same tokens. `motion/react` is
+retained only for the stamp press.
+
+## Surfaces
+
+- **`/board`** — the Flight-Strip Control Board: rack + workspace pane,
+  selection via `?line=`. Pane = fleet glance (mono figures + state
+  swatches), the selected line's detail (`ChatbotDetailHeader` plug/
+  unplug, `LineDocuments`, `EmbedSnippet` when live), the 429
+  whole-board HOLD surface, or the empty dashed strip slot. The NEW
+  LINE lever (`plug-new-line`) anchors the pane's foot.
+- **`/board/wizard` → `/documents` → `/review` → `/publish`** — the
+  flight-plan: four steps in one fixed panel. Name → wire documents
+  (tray) → review (manifest sheet + plan picker) → publish (readout
+  summary; plug runs connecting → the stamp press → redirect to the
+  board). A 0-ready publish first faces the in-world confirm dialog.
+- **`/board/plan`** — tower entries: plans as paper strips with mono
+  charge readouts, the credits meter, and the Contact modal (mailto,
+  deliberately no checkout). Figures carry a `readout-mono` "SAMPLE
+  DATA — pricing not final" note (pricing is undecided in PRODUCT.md).
+- **`/login`** — the sign-in log: one paper card on the rack ground,
+  `label-mono` heading, one primary button. OAuth2 + PKCE via route handlers.
+- **Redirects:** `/` → `/board`; `/board/chatbots/[id]` → `/board?line=<id>`.
 
 ## Do's and Don'ts
 
 ### Do:
-- **Do** keep Patch Amber rare and purposeful — the live jack, the plug control, the current waypoint, and the live pill only; raw amber surface-only, `#8A6508` wherever amber must be text or a filled control.
-- **Do** keep every label and state in the operator's plain language; never expose cloud or infrastructure vocabulary.
-- **Do** read states from the line vocabulary (unplugged / connecting / live / on hold) rather than generic status widgets.
-- **Do** carry depth with the two-step tonal layering — Panel Warm `#FDFBF4` for surfaces, Well Warm `#EDE7D3` for wells, hovers, and selections.
-- **Do** keep browser surfaces in-world: ink selection, thin hairline scrollbars, light scheme pinned.
-- **Do** write all UI copy in English, per the product language commitment.
+- **Do** carry every line state by its FORM (stamp / dash+chase / plain word / HOLD bar) and keep the sticky legend as the key.
+- **Do** set every quantity in mono (`.readout-mono`) and every section mark/stamp in `.label-mono`.
+- **Do** keep `--stamp #c8331f` the only saturated color, at stamp/lever scale, one live stamp per surface.
+- **Do** keep corners squared — derive any radius from `--radius: 0.125rem`.
+- **Do** build confirmations on the paper Dialog, keep copy in English, and pin `color-scheme: light`.
 
 ### Don't:
-- **Don't** fall back to the generic blue SaaS dashboard — the ivory/slate/amber board is the committed world (the focus outline is ink, never the blue default).
-- **Don't** introduce green or red for status; the amber line and its state label carry meaning alone.
-- **Don't** add a second shadow or animate the board for decoration — the only shadow is the live jack's, and the only authored motion is the patch-cord click at publish/copy moments.
-- **Don't** set raw Patch Amber as text on ivory; it fails 4.5:1 — Patch Amber Deep exists for that.
-- **Don't** let the retro switchboard theme slip into kitsch — keep it engineered, calm, and restrained.
-- **Don't** use multiple accents; the system has one voice. And don't reach for `window.confirm`/`alert` — the in-world Dialog is the only confirmation surface.
+- **Don't** use gradients — the world is flat material, not light effects.
+- **Don't** introduce a second saturated color or generic status hues (no green/red status, no Tailwind blue utilities).
+- **Don't** encode state in hue alone — if a state reads only by color, it is a bug.
+- **Don't** fake physicality: no bevels, no hard offset shadows, no skeuomorphic gloss; only `shadow-strip-pull` and `shadow-paper-lift`.
+- **Don't** activate `.dark` — dark mode is an explicit follow-up; the variables exist only for the shadcn contract.
+- **Don't** animate beyond the discipline: the connecting chase and the publish stamp press are the only motions (plus press-travel travel).
+- **Don't** reintroduce the retired ivory/slate/amber token world — `world-contract.test.ts` guards the retired tokens, hexes, blue utilities, and English-only copy.
+
+---
+
+# The visitor chat (Ask-First Q&A Board)
+
+A second world, deliberately its own: the public route
+`/chat/[chatbotId]` (WI-009, direction seed `fb7dfcd1`, tokens in
+`apps/web/src/app/chat/[chatbotId]/visitor.css`) serves anonymous
+visitors inside a customer's site or a shared link — not operators on
+the board. It shares nothing with the Flight-Strip world: no rack metal,
+no stamps, no mono instruments, no red. Where the operator world is a
+control tower, this is a quiet document that answers questions. Its one
+accent is the ink itself.
+
+## Colors — the quiet world
+
+Four tokens, all scoped on `.vchat` so the operator's `:root` variables
+are never referenced and never leak in:
+
+- **White ground** (`--v-ground #ffffff`): the whole surface. The visitor world's ground IS white — the inverse of the operator's "ground is not white" rule, by design.
+- **Ink** (`--v-ink #1c1e21`): near-black (never pure black) text; also the focus ring (`--v-focus`), the primary button, and the selection highlight (`::selection` is ink with white text — inverted, not tinted).
+- **Quiet ink** (`--v-ink-soft #575b60`): secondary text — note, greeting, sources, thinking state, placeholder. 6.9:1 on white.
+- **Hairline** (`--v-hairline #e7e7e4`): every divider — card separation, composer frame, source-list left rules.
+
+**The One Lift Rule.** Exactly one soft lift shadow exists on this
+surface: the composer (`0 1px 2px rgb(28 30 33 / 0.06), 0 10px 28px
+rgb(28 30 33 / 0.07)` — offset + blur, not a halo). Everything else is
+flat and hairline-dealt.
+
+**The root-scoped scrollbar.** `scrollbar-color` styles an element's
+own scroller, and this page's scroller is the root — so the themed
+scrollbar is declared on `html:has(.vchat)` (`scrollbar-color: #575b60 #e7e7e4; scrollbar-width: thin`), scoped by `:has` so it can never
+leak into operator surfaces. The values are literal hexes because a root
+selector cannot see custom properties scoped on `.vchat`; the `.vchat`
+level keeps the same declaration for any inner scroller.
+
+## Typography
+
+Inter only (`--font-sans`), inherited at 1rem / 1.6. There is no mono on
+this surface — instrumentation is an operator idea. The ramp is small
+and humane: bot name 1.375rem/650 with tight tracking; questions
+0.9375rem/600; answers 0.9375rem at 1.65 leading, capped at 68ch;
+secondary text and sources 0.8125–0.875rem in quiet ink. Focus rings are
+2px ink with 2px offset; the composer's ring lives on the frame
+(`focus-within`), not the naked input.
+
+## Components (as built)
+
+- **Server shell** (`layout.tsx`): wraps everything in `.vchat` and
+  renders the direction contract as a hidden, `aria-hidden` element —
+  React cannot emit a bare comment node, so the seed key `fb7dfcd1` rides
+  in the HTML. This is the one `dangerouslySetInnerHTML` on the surface,
+  carrying an authored constant, never untrusted text.
+- **Public page** (`page.tsx`): `force-dynamic` + `no-store` (never
+  prerenders against a build-time backend snapshot); `generateMetadata`
+  exposes only the chatbot's name (fallback "Assistant") — no company,
+  plan, or document metadata rides this path (R-7).
+- **Unavailable state** (`chat-unavailable.tsx`): one calm sentence plus
+  one honest possibility, identical for unknown id, draft/archived,
+  unreachable API, or malformed body — existence of unpublished bots is
+  never leaked (R-6), no status codes anywhere.
+- **Client island** (`chat-client.tsx`): the composer leads (textarea,
+  Enter sends / Shift+Enter newlines, 2000-char max, auto-grows to
+  160px); answered questions stack top-down as document cards — question
+  as small heading, grounded answer as body, collapsible `Sources (n)`
+  capped at 3 as footnotes with a hairline left rule; the newest card
+  carries the thinking state (three breathing dots + the word);
+  transient failures auto-retry once after 600ms, then offer a manual
+  "Try again" pill at the card (no retry is offered for plan-limit —
+  retrying cannot fix that); focus returns to the composer on settle,
+  to the retry button on failure.
+- **Typed client + visitor copy map** (`lib/chat-public.ts`):
+  zod-validated wire shapes, `credentials: 'omit'`, direct calls to
+  `NEXT_PUBLIC_API_URL` — never the same-origin BFF proxy, which exists
+  to attach the operator's Bearer token. Status codes are consumed here
+  and mapped to `VISITOR_ERROR_COPY` (unavailable / plan-limit /
+  rate-limit / network) — the single place visitor error language is
+  chosen.
+
+**The Document Card Rule.** The question is the heading, the grounded
+answer is the body, and the sources are footnotes of the same card.
+Cards are dealt by hairlines (`border-top` between items), not boxed.
+
+## Shapes & Motion
+
+Corners are soft here, unlike the board: cards and the composer use
+16px radius; the Ask and Try-again controls are pills (999px). Source
+list items are marked by a 1px hairline left border, never a colored
+slab. Motion is one authored moment — the answer's reveal
+(`v-reveal`, 260ms rise, no bounce) — plus the thinking dots' 1.2s
+breath; both, and all transitions, go still under
+`prefers-reduced-motion`.
+
+## Surfaces
+
+- **`/chat/[chatbotId]`** — the public route and the iframe target the
+  publish snippet hands out. Anonymous by design: no auth, no cookies
+  (`credentials: 'omit'` on every call), and the root-scroller theme
+  keeps the embed (480px frame) reading as the same document. Works from
+  320px up; English copy only.
+- The auth middleware guards only `/board` and `/board/:path*` —
+  `/chat/*` sits outside its matcher, so the visitor route is public and
+  anonymous.
+- `conversation_id` is an API-issued opaque token kept in a React ref,
+  in memory only — never localStorage/sessionStorage (R-5).
+
+## Do's and Don'ts (visitor world)
+
+### Do:
+- **Do** keep the document stance: question as heading, grounded answer as body, sources footnoted to the same card.
+- **Do** deal cards with hairlines and reserve the single soft lift for the composer.
+- **Do** render every failure as calm visitor copy at the card where it happened, with retry-once-then-manual.
+
+### Don't:
+- **Don't** borrow operator vocabulary — no rack metal, stamps, mono instruments, `--background`/`--card`/`--stamp` tokens, or red. This world's ink (#1c1e21) is its only accent.
+- **Don't** render untrusted text as HTML — answers, source chunks, and the bot name are plain text only; no `dangerouslySetInnerHTML` on visitor data (R-1).
+- **Don't** expose status codes, error classes, backend strings, or company blame — `VISITOR_ERROR_COPY` is the only error copy source (R-3).
+- **Don't** persist `conversation_id` anywhere — a shared device must never resume a stranger's thread (R-5).
+- **Don't** ship a dark mode for this surface — dark mode is not part of this world; it is a white document.
