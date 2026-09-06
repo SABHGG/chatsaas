@@ -157,3 +157,5 @@ All decision candidates for this WI are resolved (2026-08-28). The WI is eligibl
 ## Out-of-scope follow-ups (from Judgment Day, target b885002870bd8a6d, 2026-09-01)
 
 - **persistTurn sort-key collision (WARNING, single judge, base-only)**: each turn writes the user and assistant message rows with the SAME `createdAt` timestamp, so on the `(conversationId, createdAt)` key of `wi006-messages` the assistant Put overwrites the user row and `loadHistory` sees one row per turn. Fix needs distinct sort keys (e.g. `createdAt#role` or a monotonic suffix). Pre-existing HEAD code, observable through the sandbox table this WI created.
+
+> 2026-09-05: ADR-008 supersedes the Aurora/RDS Proxy data plane described in this record; the active path is Neon (see knowledge/tech/decisions/008-use-neon-for-vector-store.md).

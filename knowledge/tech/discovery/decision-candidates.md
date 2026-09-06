@@ -6,7 +6,7 @@ Generated from Kaddo Context Pack.
 
 **Status:** CLOSED 2026-08-28 → see `knowledge/tech/decisions/004-aws-service-selection-for-ai-capabilities.md`.
 
-**Resolution:** Amazon Bedrock (Claude 3.5 Sonnet + Titan Embeddings v2) for AI, **Aurora Serverless v2 + pgvector** for vector storage, **in-Lambda** loaders (pdf-parse + mammoth + LangChain) for parsing, RDS Proxy in front of the cluster, Secrets Manager with 7-day rotation. OpenSearch Serverless, Textract, DynamoDB vectors, and third-party managed vector stores were rejected (see ADR-004 for the full cost and trade-off analysis).
+**Resolution:** Amazon Bedrock (Claude 3.5 Sonnet + Titan Embeddings v2) for AI, **Aurora Serverless v2 + pgvector** for vector storage, **in-Lambda** loaders (pdf-parse + mammoth + LangChain) for parsing, RDS Proxy in front of the cluster, Secrets Manager with 7-day rotation. OpenSearch Serverless, Textract, DynamoDB vectors, and third-party managed vector stores were rejected (see ADR-004 for the full cost and trade-off analysis). (2026-09-05: vector storage portion superseded by ADR-008 — Neon.)
 
 ---
 
@@ -26,7 +26,7 @@ Generated from Kaddo Context Pack.
 
 **Status:** CLOSED 2026-08-22 → see `knowledge/tech/decisions/006-data-partitioning-strategy-for-tenant-isolation.md`.
 
-**Resolution:** Single Aurora cluster, single `public` schema, `company_id` and `chatbot_id` columns on every table, HNSW index on the embeddings column, with `WHERE company_id = $1 AND chatbot_id = $2` enforced on every query path. Tenant filtering is a SQL JOIN, not a separate architectural concern.
+**Resolution:** Single Aurora cluster, single `public` schema, `company_id` and `chatbot_id` columns on every table, HNSW index on the embeddings column, with `WHERE company_id = $1 AND chatbot_id = $2` enforced on every query path. Tenant filtering is a SQL JOIN, not a separate architectural concern. (2026-09-05: store is now Neon per ADR-008; partitioning predicates unchanged — single Postgres project, single public schema.)
 
 ---
 
@@ -186,7 +186,7 @@ Evaluation of native AWS service capabilities against requirements, cost compari
 
 **Status:** RESOLVED 2026-08-28 → bucket lives in WI-005.
 
-**Resolution:** `infra/lib/ingest-bucket.ts` is added to WI-005. WI-004 stays focused on Aurora+pgvector+proxy. The construct is small and isolated; either location is fine; this is the choice.
+**Resolution:** `infra/lib/ingest-bucket.ts` is added to WI-005. WI-004 stays focused on Aurora+pgvector+proxy. The construct is small and isolated; either location is fine; this is the choice. (superseded 2026-09-05 by ADR-008: Neon, no proxy.)
 
 **Cross-reference:** `knowledge/delivery/work-items/draft/WI-005-ingest-pipeline.md` (Task 2).
 
@@ -196,7 +196,7 @@ Evaluation of native AWS service capabilities against requirements, cost compari
 
 **Status:** RESOLVED 2026-08-28 → RDS Data API for v1.
 
-**Resolution:** No connection management, IAM auth, faster cold start. The env var `DB_CONNECTION_MODE` defaults to `data_api`; a `pg` mode (raw through RDS Proxy) is a fallback if the `::vector` cast is rejected by the Data API SQL dialect during implementation. The choice is a single env var.
+**Resolution:** No connection management, IAM auth, faster cold start. The env var `DB_CONNECTION_MODE` defaults to `data_api`; a `pg` mode (raw through RDS Proxy) is a fallback if the `::vector` cast is rejected by the Data API SQL dialect during implementation. The choice is a single env var. (superseded 2026-09-05 by ADR-008: @neondatabase/serverless driver over the pooled endpoint; no RDS Data API, no DB_CONNECTION_MODE split.)
 
 **Cross-reference:** `knowledge/delivery/work-items/draft/WI-005-ingest-pipeline.md` (Task 6).
 
@@ -359,8 +359,8 @@ Evaluation of native AWS service capabilities against requirements, cost compari
 
 ### DC-008-5 — Region for the User Pool
 
-**Status:** RESOLVED 2026-08-28 → same region as Aurora (us-east-1 default).
+**Status:** RESOLVED 2026-08-28 → same region as the Neon project (us-east-1 default).
 
-**Resolution:** The User Pool, Aurora, and the rest of the stack are in the same region. Bedrock is enabled in `us-east-1`. Multi-region split is a follow-up WI; the construct's region-agnostic design keeps that follow-up localized.
+**Resolution:** The User Pool, Aurora, and the rest of the stack are in the same region. Bedrock is enabled in `us-east-1`. Multi-region split is a follow-up WI; the construct's region-agnostic design keeps that follow-up localized. (2026-09-05: Aurora → Neon per ADR-008.)
 
-**Cross-reference:** `knowledge/tech/decisions/004-aws-service-selection-for-ai-capabilities.md`, `knowledge/delivery/work-items/ready/WI-004-cdk-app-bootstrap-with-aurora-pgvector.md`.
+**Cross-reference:** `knowledge/tech/decisions/004-aws-service-selection-for-ai-capabilities.md`, `knowledge/delivery/work-items/ready/WI-004-cdk-app-bootstrap-with-neon-pgvector.md`.

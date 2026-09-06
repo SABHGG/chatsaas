@@ -175,3 +175,5 @@ cdk synth (with -c skipProxy=true -c vpc:...mock):
 - [ ] WI-008 deployed before this WI sees real traffic
 
 **Recommendation**: ship this WI as-is. The README + E2E smoke are follow-ups, not blockers. The chain-of-custody contract is enforceable in code today; the trust root lands with WI-008.
+
+> 2026-09-05: ADR-008 supersedes the Aurora/RDS Proxy data plane described in this record; the active path is Neon (see knowledge/tech/decisions/008-use-neon-for-vector-store.md).

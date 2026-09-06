@@ -8,7 +8,7 @@ This is a monorepo built with pnpm workspaces, containing a Next.js web applicat
 - `apps/functions`: AWS Lambda functions (Node.js runtime)
 - `packages/core`: Shared core utilities and services
 - `packages/types`: Shared TypeScript types and interfaces
-- `infra`: Infrastructure-as-code (likely Terraform or AWS CDK)
+- `infra`: Infrastructure-as-code — AWS CDK (TypeScript, `infra/` workspace)
 - `knowledge`: Kaddo knowledge files
 - `.kaddo`: Generated Kaddo context and reports
 
@@ -48,6 +48,9 @@ This is a monorepo built with pnpm workspaces, containing a Next.js web applicat
 - **packages/types**:
   - Dependencies: @types, typescript, zod
   - Purpose: Centralized TypeScript type definitions
+
+### Data plane
+The vector store is **Neon** (serverless Postgres with pgvector, per ADR-008), reached from non-VPC Lambdas via `@neondatabase/serverless` over the pooled `-pooler` endpoint; the connection string lives in an SSM SecureString (`chatsaas-{env}-neon-url`). DynamoDB holds companies/documents/etc.; S3 stores the source documents. The Aurora-era constructs (`aurora-pgvector`, `rds-proxy`, `database-secret`, `security-groups`, `vpc`, and the embeddings custom resources) are deleted by the WI-004 re-scope.
 
 ## Observed Patterns and Conventions
 1. **Monorepo with pnpm workspaces**: All packages and apps are versioned together and share dependencies where possible.
