@@ -1,38 +1,37 @@
 import Link from 'next/link'
 import { requireSession } from '@/lib/auth'
+import { Separator } from '@/components/ui/separator'
 import { OperatorProvider } from '@/components/operator-context'
 import { UsageSlot } from '@/components/usage-slot'
 
 /**
- * The board shell (WI-007, redesigned per the locked direction
- * "The Index Rail"): a compact engraved-plate header — product name and
- * the board name, no tagline clutter — shared by the board, the wizard,
- * and the plan page. The usage meter lives at the rail's foot on the
- * board itself (RailUsage); below lg, where the rail collapses to a
- * strip, the credits pill and the plan link ride this header instead.
- * The layout is a Server Component.
+ * The board shell: a compact header — product name and the board name —
+ * shared by the board, the wizard, and the plan page. The usage meter
+ * lives at the rail's foot on the board itself (RailUsage); below lg,
+ * where the rail collapses to a strip, the credits pill and the plan
+ * link ride this header instead. The layout is a Server Component.
  */
 export default async function BoardLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession()
 
   return (
     <OperatorProvider operatorId={session.sub}>
-      <header className="border-b border-hairline-slate bg-operators-ivory">
+      <header className="border-b border-border bg-background">
         <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-6 py-4 sm:gap-4">
           <Link
             href="/board"
-            className="min-w-0 font-mono text-sm font-semibold uppercase tracking-plate text-slate-ink hover:text-slate-ink/70"
+            className="min-w-0 text-sm font-semibold tracking-tight text-foreground hover:text-foreground/70"
           >
             chatSaaS
           </Link>
 
-          {/* Engraved divider, then the board name as its plate. Below sm
-              the plate stands down: on a phone width the wordmark plus
-              the credits pill are the load-bearing marks, and the pill
-              must always clear the right gutter (min-w-0 lets the
-              shrinkable children yield instead of clipping it). */}
-          <span aria-hidden className="hidden h-4 w-px bg-hairline-slate sm:block" />
-          <p className="hidden min-w-0 font-mono text-xs font-medium uppercase tracking-plate text-slate-ink sm:block">
+          {/* Divider, then the tower name in the typewriter voice. Below
+              sm it stands down: on a phone width the wordmark plus the
+              credits pill are the load-bearing marks, and the pill must
+              always clear the right gutter (min-w-0 lets the shrinkable
+              children yield instead of clipping it). */}
+          <Separator orientation="vertical" className="hidden h-4 sm:block" />
+          <p className="label-mono hidden min-w-0 text-muted-foreground sm:block">
             Operator&rsquo;s Board
           </p>
 
@@ -42,7 +41,7 @@ export default async function BoardLayout({ children }: { children: React.ReactN
           <nav aria-label="Board" className="ml-auto flex min-w-0 items-center gap-3 sm:gap-4 lg:hidden">
             <Link
               href="/board/plan"
-              className="font-mono text-xs uppercase tracking-plate text-slate-ink hover:text-slate-ink/70"
+              className="label-mono text-muted-foreground hover:text-foreground"
             >
               Plan
             </Link>

@@ -1,3 +1,5 @@
+import { Button } from '@/components/ui/button'
+
 interface LoginPageProps {
   searchParams: Promise<{ next?: string; error?: string }>
 }
@@ -16,25 +18,24 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
-      <div className="rounded-card border border-hairline-slate bg-panel-warm px-8 py-10">
-        <h1 className="font-mono text-sm font-medium uppercase tracking-plate text-slate-ink">
+      {/* The sign-in log: plain paper on the rack-metal ground, one
+          control, no decoration. */}
+      <div className="border border-border bg-card px-8 py-10 text-card-foreground">
+        <h1 className="label-mono text-muted-foreground">
           Operator sign-in
         </h1>
-        <p className="mt-4 text-base leading-relaxed text-slate-ink">
+        <p className="mt-6 text-base leading-relaxed text-foreground">
           Plug in to manage your lines. Your chatbots, your documents, your
           plan — all on one quiet board.
         </p>
         {error ? (
-          <p className="mt-4 text-sm leading-relaxed text-slate-ink" role="alert">
+          <p className="mt-4 text-sm leading-relaxed text-destructive" role="alert">
             Sign-in didn&rsquo;t go through. Give it another try.
           </p>
         ) : null}
-        <a
-          href={loginHref}
-          className="mt-8 inline-flex items-center justify-center rounded-plug bg-slate-ink px-6 py-3 font-mono text-sm font-medium uppercase tracking-plate text-operators-ivory hover:bg-slate-ink/90"
-        >
-          Sign in
-        </a>
+        <Button asChild className="mt-8 w-full">
+          <a href={loginHref}>Sign in</a>
+        </Button>
       </div>
     </main>
   )

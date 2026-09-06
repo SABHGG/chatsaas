@@ -4,80 +4,76 @@ import { motion, useReducedMotion } from 'motion/react'
 import { LineStatePill, LINE_STATE_LABELS, type LineState } from './line-state-pill'
 
 /**
- * The labeled jack row (ADR-007 Shapes): a gently rounded card with a
- * circular jack indicator on its leading edge, the bot name as an
- * engraved-plate label (Jack Label Rule: short, machine-precise), and
- * the line-state pill on the trailing edge.
+ * The pulled strip's record header: the line name with its state stamp
+ * on the leading edge and the quiet state word on the trailing edge.
  *
- * Rules encoded here:
- * - Live Line Rule: Patch Amber appears on the jack body only when the
- *   line is live — every other state is Slate Ink (unlit jack bodies).
- * - Flat-by-Default Rule: the card itself is always flat; the only
- *   elevation in the system is `--shadow-live-jack` on the lit jack.
- * - Motion (ADR-007): the one authored moment is the patch-cord "click"
- *   when a line is plugged in at publish — opt-in via `justPlugged`, so
- *   the board never animates for decoration. The click rides Motion
- *   (motion/react): a stiff spring scale-in (0.6 → 1, small overshoot)
- *   that respects prefers-reduced-motion with an opacity-only fade.
- *   The `--animate-jack-click` CSS keyframe stays reserved for the
- *   embed panel's copy moment (the non-publish use of the click).
+ * Stamp discipline: the red LIVE stamp appears only when the line is
+ * live — every other state is form, not color (dashed outline while
+ * connecting, no stamp at all while unplugged, the crossing HOLD bar
+ * when held). The card itself stays quiet paper.
+ *
+ * Motion: the one authored moment of the whole product is THE STAMP —
+ * when a line is plugged in at publish, the LIVE stamp presses onto
+ * the strip (`justPlugged`): a stiff spring press (0.6 → 1, small
+ * overshoot) that respects prefers-reduced-motion with an opacity-only
+ * fade. It never runs on resting or plain-board renders.
  */
 export interface JackCardProps {
-  /** Bot name — kept short and plate-like by the caller (Jack Label Rule). */
+  /** Bot name — kept short by the caller. */
   name: string
   lineState: LineState
   /**
    * True only for the card the operator just published: plays the
-   * one-time patch-cord click. Never set on plain board renders.
+   * one-time stamp press. Never set on plain board renders.
    */
   justPlugged?: boolean
 }
 
-/** Visual treatment of the jack body per line state (no green/red). */
-const JACK_BODY: Record<LineState, string> = {
-  unplugged: 'bg-slate-ink',
-  connecting: 'animate-pulse bg-slate-ink/50',
-  live: 'bg-patch-amber shadow-live-jack',
-  'on hold': 'bg-slate-ink/40',
+/** Stamp treatment per line state — red only for live (no green/red). */
+const STAMP: Record<LineState, string> = {
+  unplugged: '',
+  connecting: 'stamp-dashed chase-pulse text-foreground',
+  live: 'bg-stamp text-primary-foreground',
+  'on hold': '',
 }
 
 export function JackCard({ name, lineState, justPlugged = false }: JackCardProps) {
   const isLive = lineState === 'live'
   const reducedMotion = useReducedMotion()
-  const playsClick = justPlugged && isLive
+  const playsPress = justPlugged && isLive
 
   return (
     <article
       data-testid="jack-card"
       data-line-state={lineState}
-      className="flex items-center gap-4 rounded-card border border-hairline-slate bg-panel-warm p-5"
+      className="relative flex items-center gap-4 border border-border bg-card p-5 text-card-foreground"
     >
-      {/* The jack: circular, on one edge, reads as the connection point. */}
+      {/* The stamp block: empty while unplugged or held, dashed while
+          connecting, the red LIVE stamp once the line is live. */}
       <motion.span
         aria-hidden
         data-testid="jack-body"
-        className={`flex size-11 shrink-0 items-center justify-center rounded-jack transition-colors duration-300 motion-reduce:transition-none ${JACK_BODY[lineState]}`}
-        /* The key remounts the jack the moment the plug lands, so the
-           spring click replays from its initial pose — and never runs on
-           resting or plain-board renders (ADR-007: one authored moment). */
-        key={playsClick ? 'just-plugged' : 'resting'}
-        initial={playsClick ? (reducedMotion ? { opacity: 0 } : { scale: 0.6 }) : false}
-        animate={playsClick ? (reducedMotion ? { opacity: 1 } : { scale: 1 }) : undefined}
+        className={`label-mono flex size-11 shrink-0 items-center justify-center self-start px-1 text-center transition-colors duration-300 motion-reduce:transition-none ${STAMP[lineState]}`}
+        /* The key remounts the stamp the moment the plug lands, so the
+           spring press replays from its initial pose — and never runs
+           on resting or plain-board renders. */
+        key={playsPress ? 'just-plugged' : 'resting'}
+        initial={playsPress ? (reducedMotion ? { opacity: 0 } : { scale: 0.6 }) : false}
+        animate={playsPress ? (reducedMotion ? { opacity: 1 } : { scale: 1 }) : undefined}
         transition={
           reducedMotion
             ? { duration: 0.25 }
             : { type: 'spring', stiffness: 520, damping: 20, mass: 0.5 }
         }
       >
-        {/* The pinhole — always ivory, amber or ink body around it. */}
-        <span className="size-3 rounded-jack bg-operators-ivory" />
+        {isLive ? 'Live' : ''}
       </motion.span>
 
-      {/* Engraved-plate bot label. */}
+      {/* The line label — doubled rule underneath when live. */}
       <h3
         data-testid="jack-name"
         title={name}
-        className="min-w-0 truncate font-mono text-sm font-medium uppercase tracking-plate"
+        className={`min-w-0 truncate text-base font-medium ${isLive ? 'rule-doubled' : ''}`}
       >
         {name}
       </h3>
@@ -86,7 +82,11 @@ export function JackCard({ name, lineState, justPlugged = false }: JackCardProps
         <LineStatePill state={lineState} />
       </div>
 
-      {/* Screen-reader line: the pill text is visible, the jack is decorative. */}
+      {/* The HOLD bar crosses the held strip, full width. */}
+      {lineState === 'on hold' && <span aria-hidden className="hold-bar">Hold</span>}
+
+      {/* Screen-reader line: the pill text is visible, the stamp and
+          bar are decorative. */}
       <span className="sr-only">
         {name} — {LINE_STATE_LABELS[lineState]}
       </span>

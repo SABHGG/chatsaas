@@ -56,8 +56,11 @@ describe('UsageMeter', () => {
     const { container } = render(
       <UsageMeter planName="Starter" monthlyLimit={100} used={40} prepaidBalance={5} />,
     )
+    // The Radix indicator carries the fill as a translate transform
+    // (value 40 of 100 → translateX(-60%)), not a width.
     const fill = container.querySelector('[data-testid="usage-fill"]') as HTMLElement
-    expect(fill.style.width).toBe('40%')
-    expect(fill.className).not.toContain('patch-amber')
+    expect(fill.style.transform).toBe('translateX(-60%)')
+    expect(fill.classList.contains('bg-primary')).toBe(false)
+    expect(fill.classList.contains('bg-foreground')).toBe(true)
   })
 })

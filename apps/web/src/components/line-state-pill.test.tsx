@@ -4,9 +4,9 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { LINE_STATE_LABELS, LINE_STATES, LineStatePill } from './line-state-pill'
 
 /**
- * WI-007 Task 6: the line vocabulary is binding — the pill must render
- * exactly Unplugged / Connecting / Live / On hold, and Patch Amber may
- * appear only on the live state (Live Line Rule).
+ * The line vocabulary is binding — the pill must render exactly
+ * Unplugged / Connecting / Live / On hold, and the primary emphasis may
+ * appear only on the live state.
  */
 describe('LineStatePill', () => {
   afterEach(cleanup)
@@ -28,14 +28,14 @@ describe('LineStatePill', () => {
     }
   })
 
-  it('carries Patch Amber only on the live state (Live Line Rule)', () => {
+  it('carries the primary emphasis only on the live state', () => {
     const live = render(<LineStatePill state="live" />)
-    expect(live.container.firstElementChild?.className).toContain('border-patch-amber')
+    expect(live.container.firstElementChild?.classList.contains('bg-primary')).toBe(true)
     live.unmount()
 
     for (const state of ['unplugged', 'connecting', 'on hold'] as const) {
       const { container, unmount } = render(<LineStatePill state={state} />)
-      expect(container.firstElementChild?.className).not.toContain('patch-amber')
+      expect(container.firstElementChild?.classList.contains('bg-primary')).toBe(false)
       unmount()
     }
   })

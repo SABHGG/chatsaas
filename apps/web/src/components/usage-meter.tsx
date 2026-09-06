@@ -1,18 +1,19 @@
 import { ApiError } from '@/lib/api-errors'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 
 /**
- * The usage meter (WI-007 Task 7): plan + prepaid credits as panel
- * instrumentation — a gauge channel with an 80% boundary tick, not a
- * SaaS progress bar.
+ * The usage meter: plan + prepaid credits as panel instrumentation — a
+ * gauge channel with an 80% boundary tick, not a marketing progress bar.
  *
  * Status surfaces read in line vocabulary:
  * - used ≥ 80% of the plan            → 'Almost out of credits'
  * - plan exhausted / zero balance 429 → 'On hold' (matches the line word)
  * - a 429 from the API                → 'On hold' (the API said it first)
  *
- * Color discipline: the meter is instrumentation, not the live line —
- * the fill stays Slate Ink at every level. The alert states speak
- * through labels and copy, never through green/red.
+ * Emphasis discipline: the meter is instrumentation, not the live line —
+ * the fill stays achromatic (bg-foreground) at every level. Alert states
+ * speak through badges and copy, never through green/red.
  */
 export interface UsageMeterProps {
   /** Plan name (e.g. 'Starter'); null/undefined when the line has no plan yet. */
@@ -42,44 +43,42 @@ export function UsageMeter({ planName, monthlyLimit = 0, used = 0, prepaidBalanc
     <section
       data-testid="usage-meter"
       aria-label="Credits"
-      className="rounded-card border border-hairline-slate bg-panel-warm p-5"
+      className="border border-border bg-card p-5 text-card-foreground"
     >
       <div className="flex items-baseline justify-between gap-4">
-        <h3 className="font-mono text-xs uppercase tracking-plate">Credits</h3>
+        <h3 className="label-mono text-foreground">Credits</h3>
         {status !== 'ok' && (
-          <span
+          <Badge
             data-testid="usage-status"
-            className="inline-flex items-center rounded-plate border border-slate-ink/30 px-2.5 py-1 font-mono text-xs uppercase tracking-plate"
+            variant={status === 'on-hold' ? 'destructive' : 'outline'}
           >
             {status === 'on-hold' ? ON_HOLD_LABEL : ALMOST_OUT_LABEL}
-          </span>
+          </Badge>
         )}
       </div>
 
-      {/* The gauge channel: flat well, ink fill, 80% boundary tick. */}
+      {/* The gauge channel: paper-dim track, ink fill, 80% tick. */}
       {hasReadings && (
-        <div
-          data-testid="usage-channel"
-          role="meter"
-          aria-label="Monthly plan credits"
-          aria-valuemin={0}
-          aria-valuemax={Math.max(monthlyLimit, 1)}
-          aria-valuenow={used}
-          className="relative mt-4 h-2 overflow-hidden rounded-full bg-well-warm"
-        >
-          <span
-            data-testid="usage-fill"
-            className="absolute inset-y-0 left-0 bg-slate-ink transition-[width] duration-300 motion-reduce:transition-none"
-            style={{ width: `${Math.round(ratio * 100)}%` }}
+        <div className="relative mt-4">
+          <Progress
+            data-testid="usage-channel"
+            role="meter"
+            aria-label="Monthly plan credits"
+            aria-valuemin={0}
+            aria-valuemax={Math.max(monthlyLimit, 1)}
+            aria-valuenow={used}
+            value={Math.round(ratio * 100)}
+            indicatorClassName="bg-foreground"
+            indicatorProps={{ 'data-testid': 'usage-fill' }}
           />
           <span
             aria-hidden
-            className="absolute inset-y-0 left-[80%] w-px bg-slate-ink/30"
+            className="absolute inset-y-0 left-[80%] w-px bg-foreground/40"
           />
         </div>
       )}
 
-      <div className="mt-3 flex items-baseline justify-between gap-4 font-mono text-xs tabular-nums">
+      <div className="readout-mono mt-3 flex items-baseline justify-between gap-4 text-xs">
         <span data-testid="usage-plan">
           {planName ?? 'No plan'} · {loading ? '— / —' : `${used} / ${monthlyLimit}`}
         </span>
@@ -89,12 +88,12 @@ export function UsageMeter({ planName, monthlyLimit = 0, used = 0, prepaidBalanc
       </div>
 
       {status === 'on-hold' && (
-        <p className="mt-2 text-sm text-slate-ink/70">
+        <p className="mt-2 text-sm text-muted-foreground">
           This line is on hold. Top up your plan to bring it back.
         </p>
       )}
       {status === 'almost-out' && (
-        <p className="mt-2 text-sm text-slate-ink/70">Add prepaid credits to stay live through the month.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Add prepaid credits to stay live through the month.</p>
       )}
     </section>
   )
@@ -106,7 +105,7 @@ export function meterStatus(input: {
   prepaidBalance: number | null | undefined
   error: ApiError | null
 }): MeterStatus {
-  // The API said it first: a 429 IS the on-hold state (Task 7).
+  // The API said it first: a 429 IS the on-hold state.
   if (input.error?.status === 429) return 'on-hold'
 
   const planExhausted = input.monthlyLimit > 0 && input.used >= input.monthlyLimit

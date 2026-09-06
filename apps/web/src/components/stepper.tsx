@@ -1,14 +1,15 @@
 import type { ReactNode } from 'react'
 
 /**
- * The guided create flow (WI-007 Task 8): four discrete steps —
- * name → documents → review → publish. The wizard owns the step state;
- * the stepper only renders it.
+ * The guided create flow: four discrete steps — name → documents →
+ * review → publish — rendered as the plan's sections on the flight-plan
+ * filing form. The wizard owns the step state; the stepper only
+ * renders it.
  *
- * Color discipline: the CURRENT step carries Patch Amber — the create
- * flow IS the plug path, a primary-waypoint use in the Live Line
- * Rule's spirit. Completed steps are tonal ink; future steps stay
- * hairline.
+ * Emphasis discipline: the CURRENT section carries the primary (ink)
+ * emphasis — a filled square waypoint; completed sections are a tonal
+ * step of the ink; future sections stay quiet (hairline). Waypoints are
+ * squared, like everything on the board.
  */
 export const WIZARD_STEPS = [
   { id: 'name', label: 'Name' },
@@ -24,23 +25,23 @@ export interface StepperProps {
 }
 
 const STEP_DOT: Record<'complete' | 'current' | 'future', string> = {
-  complete: 'border-slate-ink bg-slate-ink',
-  current: 'border-patch-amber bg-patch-amber',
-  future: 'border-hairline-slate bg-transparent',
+  complete: 'border-foreground/40 bg-foreground/40',
+  current: 'border-primary bg-primary',
+  future: 'border-border bg-transparent',
 }
 
 const STEP_LABEL: Record<'complete' | 'current' | 'future', string> = {
-  complete: 'text-slate-ink',
-  current: 'text-patch-amber-deep',
-  future: 'text-slate-ink/70',
+  complete: 'text-foreground',
+  current: 'text-primary font-medium',
+  future: 'text-muted-foreground',
 }
 
-/** The cord between waypoints: solid once wired, hairline ahead. */
+/** The rule between sections: solid once filed, quiet ahead. */
 function Cord({ wired }: { wired: boolean }) {
   return (
     <span
       aria-hidden
-      className={`h-px flex-1 ${wired ? 'bg-slate-ink' : 'bg-hairline-slate'}`}
+      className={`h-px flex-1 ${wired ? 'bg-foreground/40' : 'bg-border'}`}
     />
   )
 }
@@ -64,17 +65,16 @@ export function Stepper({ current }: StepperProps) {
             className={index < last ? 'flex-1' : 'shrink-0'}
           >
             <div className="flex items-center">
-              {/* The waypoint jack — a small circle, Patch Amber only when current. */}
+              {/* The section waypoint — a small square, ink only when
+                  current. */}
               <span
                 aria-hidden
                 data-testid={`stepper-dot-${step.id}`}
-                className={`size-4 shrink-0 rounded-jack border-2 ${STEP_DOT[phase]}`}
+                className={`size-3.5 shrink-0 border-2 ${STEP_DOT[phase]}`}
               />
               {index < last && <Cord wired={phase !== 'future'} />}
             </div>
-            <span
-              className={`mt-2 block font-mono text-xs uppercase tracking-plate ${STEP_LABEL[phase]}`}
-            >
+            <span className={`label-mono mt-2 block ${STEP_LABEL[phase]}`}>
               {step.label}
             </span>
           </li>

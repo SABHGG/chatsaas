@@ -2,18 +2,21 @@
 
 import { useCallback, useId, useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { uploadDocument, validateUploadFile, type UploadedDocument } from '@/lib/upload'
+import { Button } from '@/components/ui/button'
+import { Progress } from '@/components/ui/progress'
 import type { WizardDocument } from './wizard-store'
 
 /**
- * The document dropzone (WI-007 Task 10): drag-and-drop with a
- * keyboard-accessible file-input fallback (the visually-hidden input
- * keeps native focus and Enter/Space activation). Uploads ride the BFF
- * proxy with XHR progress events, retry exactly once on transient
- * network failure, and surface structured API errors in operator
- * language (429 → "On hold").
+ * The document dropzone: drag-and-drop with a keyboard-accessible
+ * file-input fallback (the visually-hidden input keeps native focus and
+ * Enter/Space activation). Uploads ride the BFF proxy with XHR progress
+ * events, retry exactly once on transient network failure, and surface
+ * structured API errors in operator language (429 → "On hold").
  *
- * Instrumentation discipline: the progress fill is Slate Ink — this is
- * wiring work, not the live line, so no Patch Amber here.
+ * Instrumentation discipline: the progress fill is achromatic ink —
+ * this is wiring work, not the live line, so no stamp red here. The
+ * tray is paper with a solid hairline; a dragged-over tray opens
+ * (accent ground, ink edge) instead of changing hue.
  */
 export interface FileDropzoneProps {
   /** The line the documents are being wired into. */
@@ -109,8 +112,8 @@ export function FileDropzone({ chatbotId, onUploaded }: FileDropzoneProps) {
           if ((event.target as HTMLElement).tagName === 'INPUT') return
           inputRef.current?.click()
         }}
-        className={`flex cursor-pointer flex-col items-center justify-center rounded-card border border-dashed px-6 py-10 text-center transition-colors motion-reduce:transition-none ${
-          dragOver ? 'border-slate-ink bg-well-warm' : 'border-hairline-slate bg-panel-warm'
+        className={`flex cursor-pointer flex-col items-center justify-center border px-6 py-10 text-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 motion-reduce:transition-none ${
+          dragOver ? 'border-foreground bg-accent' : 'border-border bg-card'
         }`}
       >
         <input
@@ -127,51 +130,49 @@ export function FileDropzone({ chatbotId, onUploaded }: FileDropzoneProps) {
         />
         {phase === 'uploading' ? (
           <>
-            <p data-testid="dropzone-uploading" className="font-mono text-xs uppercase tracking-plate">
+            <p data-testid="dropzone-uploading" className="readout-mono text-sm text-muted-foreground">
               Uploading · {progress}%
             </p>
-            {/* The wiring meter: flat well, ink fill. */}
-            <div
+            {/* The wiring meter: paper-dim track, ink fill. */}
+            <Progress
               data-testid="dropzone-progress"
-              role="progressbar"
-              aria-valuenow={progress}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              className="mt-3 h-2 w-56 overflow-hidden rounded-full bg-well-warm"
-            >
-              <span className="block h-full bg-slate-ink" style={{ width: `${progress}%` }} />
-            </div>
+              value={progress}
+              className="mt-3 h-2 w-56"
+              indicatorClassName="bg-foreground"
+            />
           </>
         ) : (
-          <p className="text-sm text-slate-ink/70">
-            Drop a file here, or{' '}
-            <span className="font-medium text-slate-ink underline underline-offset-4">
+          <p className="text-sm text-muted-foreground">
+            Drop a file in the tray, or{' '}
+            <span className="font-medium text-foreground underline underline-offset-4">
               browse from this device
             </span>
             .
           </p>
         )}
-        <p id={`${inputId}-hint`} className="mt-2 font-mono text-xs uppercase tracking-plate text-slate-ink/60">
+        <p id={`${inputId}-hint`} className="readout-mono mt-2 text-xs text-muted-foreground/80">
           PDF · DOCX · TXT · MD · up to 10 MB
         </p>
       </div>
 
       {phase === 'error' && error && (
         <div className="mt-3 flex items-start justify-between gap-4">
-          <p role="alert" data-testid="dropzone-error" className="text-sm text-slate-ink">
+          <p role="alert" data-testid="dropzone-error" className="text-sm text-foreground">
             {error}
           </p>
-          <button
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             data-testid="dropzone-dismiss"
             onClick={() => {
               setError(null)
               setPhase('idle')
             }}
-            className="shrink-0 rounded-plate border border-hairline-slate bg-panel-warm px-3 py-1.5 font-mono text-xs uppercase tracking-plate hover:bg-well-warm"
+            className="shrink-0"
           >
             Try again
-          </button>
+          </Button>
         </div>
       )}
     </div>

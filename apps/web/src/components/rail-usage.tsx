@@ -8,8 +8,8 @@ import { useHydrated } from '@/lib/use-hydrated'
 import { UsageMeter } from './usage-meter'
 
 /**
- * The rail-bottom usage meter (locked direction "The Index Rail"): the
- * company credits instrument, permanently on at the foot of the index.
+ * The rail-bottom usage meter (the Flight-Strip Control Board): the
+ * company credits instrument, permanently on at the foot of the strip rack.
  * It fetches the prepaid credit balance through the BFF proxy after
  * hydration (DC-007-5 — the slot never reads server state that could
  * differ across the boundary), the same usage-slot pattern as the old

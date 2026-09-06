@@ -5,8 +5,8 @@ import { createElement } from 'react'
 import { ApiError } from '@/lib/api-errors'
 
 /**
- * WI-007 Task 12 (Index Rail revision): the board renders the index
- * rail — one selectable card per chatbot (name + state lamp) — and the
+ * WI-007 Task 12 (strip-rack revision): the board renders the strip
+ * rack — one selectable strip per chatbot (name + state stamp) — and the
  * main pane: the fleet glance by default, the selected line's full
  * detail when `?line=<chatbotId>` is in the URL. The page is a Server
  * Component — its data sources (session + API calls) are mocked here so
@@ -123,17 +123,17 @@ describe('BoardPage — the index rail', () => {
     mockApiByPath()
     await renderBoard()
 
-    // Index cards carry the line names as engraved-plate labels.
+    // Index cards carry the line names as strip labels.
     expect(screen.getByText('Front Desk')).toBeTruthy()
     expect(screen.getByText('Menu Line')).toBeTruthy()
 
-    // Lamp states read from the line vocabulary: draft → unplugged,
-    // published → live (amber).
+    // Strip states read from the line vocabulary: draft → unplugged,
+    // published → live (the red stamp).
     const draftCard = screen.getByText('Front Desk').closest('[data-testid="board-line-link"]')!
     expect(draftCard.getAttribute('data-line-state')).toBe('unplugged')
     const liveCard = screen.getByText('Menu Line').closest('[data-testid="board-line-link"]')!
     expect(liveCard.getAttribute('data-line-state')).toBe('live')
-    expect(liveCard.querySelector('[data-testid="rail-lamp"]')!.className).toContain('bg-patch-amber')
+    expect(liveCard.querySelector('[data-testid="rail-lamp"]')!.classList.contains('bg-stamp')).toBe(true)
 
     // Selection is carried by the URL, not hidden state.
     const links = screen.getAllByTestId('board-line-link')
@@ -145,26 +145,25 @@ describe('BoardPage — the index rail', () => {
     expect(screen.getByTestId('board-glance')).toBeTruthy()
     expect(screen.getByRole('heading', { name: 'Your lines' })).toBeTruthy()
 
-    // The create/plug control is the primary action into the wizard; its
-    // ground is the deep amber step (raw patch-amber fails the 4.5:1
-    // ivory-text contrast floor — raw amber stays on the lamps).
+    // The create/plug control is the NEW LINE lever (the stamp-red
+    // variant — the only red control at rest).
     const plug = screen.getByTestId('plug-new-line')
     expect(plug.getAttribute('href')).toBe('/board/wizard')
-    expect(plug.className).toContain('bg-patch-amber-deep')
+    expect(plug.className).toContain('bg-stamp')
   })
 
-  it('never plays the publish animation or casts a shadow on a plain board render', async () => {
+  it('never plays the publish animation or casts an emphasis shadow on a plain board render', async () => {
     mockApiByPath()
     await renderBoard()
 
-    // The live lamp is amber surface — but Flat-by-Default holds: no
-    // jack-click animation and no live-jack shadow anywhere in the rail.
+    // The live stamp carries the inscription red — but the rail strip
+    // stays quiet: no press animation and no elevation on the stamps.
     const lamp = screen.getByText('Menu Line').closest('[data-testid="board-line-link"]')!
       .querySelector('[data-testid="rail-lamp"]')! as HTMLElement
-    expect(lamp.className).toContain('bg-patch-amber')
+    expect(lamp.classList.contains('bg-stamp')).toBe(true)
     for (const element of Array.from(document.querySelectorAll<HTMLElement>('[data-testid="rail-lamp"]'))) {
       expect(element.className).not.toContain('animate-jack-click')
-      expect(element.className).not.toContain('shadow-live-jack')
+      expect(element.className).not.toContain('shadow')
     }
   })
 

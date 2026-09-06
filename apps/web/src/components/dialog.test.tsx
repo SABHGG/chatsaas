@@ -4,15 +4,14 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { DIALOG_CANCEL_CLASS, DIALOG_PRIMARY_CLASS, Dialog } from './dialog'
 
 /**
- * The in-world dialog on Base UI's headless primitive (DC-007-2/-3):
- * same public API, world styling, and testids as the hand-rolled version
- * — Escape, backdrop dismissal, focus, and the aria wiring now come from
- * the primitive, not from our own document listeners.
+ * The board's dialog on the shadcn/Radix primitive: same public API and
+ * testids as before — Escape, backdrop dismissal, focus, and the aria
+ * wiring come from the primitive, not from our own document listeners.
  */
-describe('Dialog (Base UI primitive)', () => {
+describe('Dialog (shadcn/Radix primitive)', () => {
   afterEach(cleanup)
 
-  it('renders its content in-world and closes on Escape via Base UI', async () => {
+  it('renders its content and closes on Escape via the primitive', async () => {
     const onClose = vi.fn()
     const { rerender } = render(
       <Dialog

@@ -4,12 +4,11 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { JackCard } from './jack-card'
 
 /**
- * WI-007 Task 6: the labeled jack row. Patch Amber may light the jack
- * body only when the line is live (Live Line Rule); every other state
- * stays Slate Ink. The one elevated element is the lit jack
- * (--shadow-live-jack), and the patch-cord click — Motion's spring —
- * plays only when the card was just plugged in at publish. The
- * reduced-motion fallback lives in jack-card-reduced-motion.test.tsx.
+ * The strip record header. The red LIVE stamp may appear only when the
+ * line is live; every other state stays a quiet form (dash, blank). The
+ * stamp press — Motion's spring — plays only when the card was just
+ * plugged in at publish. The reduced-motion fallback lives in
+ * jack-card-reduced-motion.test.tsx.
  */
 describe('JackCard', () => {
   afterEach(cleanup)
@@ -20,33 +19,30 @@ describe('JackCard', () => {
     return `${jack.style.transform} ${jack.style.opacity}`
   }
 
-  it('renders the bot name as the engraved-plate label', () => {
+  it('renders the bot name as the line label', () => {
     render(<JackCard name="Front Desk" lineState="unplugged" />)
     const name = screen.getByTestId('jack-name')
     expect(name.textContent).toBe('Front Desk')
   })
 
-  it('lights the jack with Patch Amber and the live-jack shadow only when live', () => {
+  it('shows the red stamp only when live', () => {
     const live = render(<JackCard name="Front Desk" lineState="live" />)
     const liveJack = live.container.querySelector('[data-testid="jack-body"]')!
-    expect(liveJack.className).toContain('bg-patch-amber')
-    expect(liveJack.className).toContain('shadow-live-jack')
+    expect(liveJack.classList.contains('bg-stamp')).toBe(true)
     live.unmount()
 
     for (const state of ['unplugged', 'connecting', 'on hold'] as const) {
       const { container, unmount } = render(<JackCard name="Front Desk" lineState={state} />)
       const jack = container.querySelector('[data-testid="jack-body"]')!
-      expect(jack.className).not.toContain('patch-amber')
-      expect(jack.className).not.toContain('shadow-live-jack')
-      expect(jack.className).toContain('bg-slate-ink')
+      expect(jack.classList.contains('bg-stamp')).toBe(false)
       unmount()
     }
   })
 
-  it('keeps the card flat at rest (Flat-by-Default Rule)', () => {
+  it('keeps the emphasis on the jack, not the card', () => {
     const { container } = render(<JackCard name="Front Desk" lineState="live" />)
     const card = container.querySelector('[data-testid="jack-card"]')!
-    expect(card.className).not.toContain('shadow')
+    expect(card.classList.contains('bg-primary')).toBe(false)
   })
 
   it('plays the patch-cord spring click only on the just-plugged live card', () => {

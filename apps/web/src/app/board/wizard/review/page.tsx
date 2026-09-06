@@ -11,21 +11,22 @@ import {
 } from '@/lib/wizard-refs'
 import { documentListSchema, planListSchema, planPriceLabel, type Plan } from '@/lib/api-schemas'
 import { proxyRequest } from '@/lib/bff-request'
+import { Button } from '@/components/ui/button'
 import { NEW_CHATBOT_ID, createWizardStore } from '@/components/wizard-store'
 import { useOperatorId } from '@/components/operator-context'
 
 /**
- * Step 3 — review the line (WI-007 Task 11): readiness (how many
- * documents have finished processing, straight from the API — the draft
- * only knows 'uploaded') and the plan picker (GET /plans/available
- * through the BFF proxy). The picked plan id is written straight to
- * sessionStorage (lib/wizard-refs.ts) so the publish step has its
- * plan_id even after a reload.
+ * Step 3 — review the line: readiness (how many documents have finished
+ * processing, straight from the API — the draft only knows 'uploaded')
+ * and the plan picker (GET /plans/available through the BFF proxy). The
+ * picked plan id is written straight to sessionStorage
+ * (lib/wizard-refs.ts) so the publish step has its plan_id even after a
+ * reload.
  *
- * Step guard: post-hydration client redirect (DC-007-5) — no name from
- * step 1 sends the operator back to step 1. Storage refs are read
- * during render, gated by the hydration guard; effects only setState
- * from async callbacks.
+ * Step guard: post-hydration client redirect — no name from step 1
+ * sends the operator back to step 1. Storage refs are read during
+ * render, gated by the hydration guard; effects only setState from
+ * async callbacks.
  */
 export default function WizardReviewPage() {
   const operatorId = useOperatorId()
@@ -39,8 +40,8 @@ export default function WizardReviewPage() {
   const [plans, setPlans] = useState<Plan[] | null>(null)
   const [plansError, setPlansError] = useState<string | null>(null)
 
-  // Render-time reads of the draft's server-side refs (DC-007-5: gated,
-  // so the hydrating render matches the server output).
+  // Render-time reads of the draft's server-side refs (gated, so the
+  // hydrating render matches the server output).
   const hasChatbot = hydrated ? readChatbotRef(operatorId) !== null : false
   const planId = pickedPlanId ?? (hydrated ? readPlanRef(operatorId) : null)
 
@@ -73,8 +74,8 @@ export default function WizardReviewPage() {
       })
       .catch(() => {
         if (cancelled) return
-        // Readiness is advisory; the publish step re-checks and DC-007-2
-        // gates a 0-ready publish behind the confirmation dialog.
+        // Readiness is advisory; the publish step re-checks and the
+        // 0-ready publish stays behind the confirmation dialog.
         setReadiness({ ready: 0, total: 0 })
       })
     return () => {
@@ -109,23 +110,23 @@ export default function WizardReviewPage() {
 
   const storeName = store((state) => state.name)
   const documents = store((state) => state.documents)
-  // Persisted-store values render only after hydration (DC-007-5).
+  // Persisted-store values render only after hydration.
   const draftName = hydrated ? storeName : ''
   const draftCount = hydrated ? documents.length : 0
 
   return (
     <div className="flex flex-1 flex-col" data-testid="wizard-review">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-ink">Review the line</h1>
+      <h1 className="text-2xl font-semibold tracking-tight text-foreground">Review the line</h1>
 
-      {/* Readiness — machine-precise, in-world. */}
-      <div className="mt-6 rounded-card border border-hairline-slate bg-panel-warm p-5">
+      {/* The manifest sheet — machine-precise mono readouts on paper. */}
+      <div className="mt-6 border border-border bg-card p-5 text-card-foreground">
         <div className="flex items-baseline justify-between gap-4">
-          <h2 className="font-mono text-xs uppercase tracking-plate text-slate-ink">
+          <h2 className="text-sm font-medium text-foreground">
             {draftName || 'Unnamed line'}
           </h2>
           <span
             data-testid="wizard-readiness"
-            className="font-mono text-xs tabular-nums text-slate-ink/70"
+            className="readout-mono text-xs text-muted-foreground"
           >
             {!hasChatbot
               ? '0 of 0 documents ready'
@@ -134,14 +135,15 @@ export default function WizardReviewPage() {
                 : 'Checking documents…'}
           </span>
         </div>
-        <p className="mt-2 text-sm leading-relaxed text-slate-ink/70">
+        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           {draftCount} wired in this session. Ready documents are answered from; the rest finish
           processing on their own.
         </p>
       </div>
 
-      {/* Plan picker — plates from the API, amber-free (it is a choice, not the plug). */}
-      <h2 className="mt-8 font-mono text-xs uppercase tracking-plate text-slate-ink">
+      {/* Plan picker — strip rows from the API; the picker is a choice,
+          not the stamp. */}
+      <h2 className="label-mono mt-8 text-foreground">
         Choose the plan
       </h2>
       <div className="mt-3 flex flex-col gap-2" role="radiogroup" aria-label="Plan">
@@ -149,8 +151,10 @@ export default function WizardReviewPage() {
           <label
             key={plan.id}
             data-testid={`plan-option-${plan.id}`}
-            className={`flex cursor-pointer items-center justify-between gap-4 rounded-plate border px-4 py-3 ${
-              planId === plan.id ? 'border-slate-ink bg-well-warm' : 'border-hairline-slate bg-panel-warm'
+            className={`flex cursor-pointer items-center justify-between gap-4 border px-4 py-3 text-sm ${
+              planId === plan.id
+                ? 'border-foreground/70 bg-accent text-accent-foreground'
+                : 'border-border bg-card text-card-foreground hover:border-foreground/40'
             }`}
           >
             <span className="flex items-center gap-3">
@@ -160,17 +164,17 @@ export default function WizardReviewPage() {
                 value={plan.id}
                 checked={planId === plan.id}
                 onChange={() => pickPlan(plan.id)}
-                className="accent-slate-ink"
+                className="accent-foreground"
               />
-              <span className="text-sm font-medium text-slate-ink">{plan.name}</span>
+              <span className="text-sm font-medium">{plan.name}</span>
             </span>
-            <span className="font-mono text-xs tabular-nums text-slate-ink/70">
+            <span className="readout-mono text-xs text-muted-foreground">
               {planPriceLabel(plan)}
             </span>
           </label>
         ))}
         {plansError && (
-          <p role="alert" className="text-sm text-slate-ink">
+          <p role="alert" className="text-sm text-foreground">
             {plansError}
           </p>
         )}
@@ -179,11 +183,11 @@ export default function WizardReviewPage() {
       <div className="mt-auto flex items-center justify-between pt-6">
         <Link
           href="/board/wizard/documents"
-          className="font-mono text-xs uppercase tracking-plate text-slate-ink hover:text-slate-ink/70"
+          className="text-sm text-muted-foreground hover:text-foreground"
         >
           Back
         </Link>
-        <button
+        <Button
           type="button"
           data-testid="wizard-continue"
           disabled={!hydrated || !planId}
@@ -191,10 +195,9 @@ export default function WizardReviewPage() {
             store.getState().goToStep('publish')
             router.push('/board/wizard/publish')
           }}
-          className="rounded-plug bg-slate-ink px-6 py-2.5 font-mono text-xs font-semibold uppercase tracking-plate text-operators-ivory hover:bg-slate-ink/90 disabled:opacity-60"
         >
           Continue
-        </button>
+        </Button>
       </div>
     </div>
   )

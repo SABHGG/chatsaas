@@ -1,22 +1,24 @@
 'use client'
 
-import { Dialog as BaseDialog } from '@base-ui-components/react/dialog'
+import { buttonVariants } from '@/components/ui/button'
+import {
+  Dialog as ShadcnDialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import type { ReactNode } from 'react'
 
 /**
- * The in-world dialog (DC-007-2, DC-007-3): a dimmed panel over the
- * board — never `window.confirm`, never a browser alert. Discipline:
- * Flat-by-Default holds here too. The panel carries no shadow of its
- * own; separation comes from the tonal ink overlay and the hairline
- * border. No colored accents — the panel is ivory, the actions are ink,
- * and amber appears only if the caller marks an action as the primary
- * publish control.
+ * The board's confirmation dialog: a dimmed overlay over a focused
+ * panel — never `window.confirm`, never a browser alert.
  *
- * Built on Base UI's headless Dialog: Escape, backdrop dismissal, focus
- * handling, and the aria wiring are the primitive's job now — the
- * hand-rolled keyboard listener is gone. The public API (open/onClose/
- * title/children/actions) and the world styling are unchanged; the testids
- * survive on the primitive's own elements.
+ * Built on the shadcn/Radix dialog primitive: Escape, backdrop
+ * dismissal, focus handling, and the aria wiring are the primitive's
+ * job. The public API (open/onClose/title/children/actions) is the
+ * board's own; the testids survive on the primitive's own elements
+ * (dialog-overlay on the backdrop, dialog-panel on the content).
  */
 export interface DialogProps {
   open: boolean
@@ -29,41 +31,35 @@ export interface DialogProps {
 
 export function Dialog({ open, onClose, title, children, actions }: DialogProps) {
   return (
-    <BaseDialog.Root
+    <ShadcnDialog
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) onClose()
       }}
     >
-      <BaseDialog.Portal>
-        <BaseDialog.Backdrop
-          data-testid="dialog-overlay"
-          className="fixed inset-0 z-50 bg-slate-ink/40"
-        />
-        <BaseDialog.Popup
-          data-testid="dialog-panel"
-          className="fixed left-1/2 top-1/2 z-50 w-[calc(100%_-_3rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-card border border-hairline-slate bg-panel-warm p-6 outline-none"
-        >
-          <BaseDialog.Title className="font-mono text-sm font-semibold uppercase tracking-plate text-slate-ink">
-            {title}
-          </BaseDialog.Title>
-          <div className="mt-3 text-sm leading-relaxed text-slate-ink/80">{children}</div>
-          <div className="mt-6 flex items-center justify-end gap-3">{actions}</div>
-        </BaseDialog.Popup>
-      </BaseDialog.Portal>
-    </BaseDialog.Root>
+      <DialogContent
+        data-testid="dialog-panel"
+        showCloseButton={false}
+        className="max-w-md sm:max-w-md"
+      >
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div className="text-sm leading-relaxed text-muted-foreground">{children}</div>
+        <DialogFooter>{actions}</DialogFooter>
+      </DialogContent>
+    </ShadcnDialog>
   )
 }
 
-/** Shared action-button treatments for dialogs (ink first, amber rationed). */
-export const DIALOG_CANCEL_CLASS =
-  'rounded-plate border border-hairline-slate bg-panel-warm px-4 py-2 font-mono text-xs font-medium uppercase tracking-plate text-slate-ink hover:bg-well-warm'
+/**
+ * Shared action-button treatments for dialogs, kept in sync with the
+ * shadcn Button variants (cancel = outline, primary = default).
+ */
+export const DIALOG_CANCEL_CLASS = buttonVariants({ variant: 'outline' })
 
-/** Primary action ground uses the deep amber step: raw patch-amber fails
- *  the 4.5:1 ivory-text contrast floor (raw amber stays surface-only —
- *  jack bodies, pill dots, live rings). */
-export const DIALOG_PRIMARY_CLASS =
-  'rounded-plug bg-patch-amber-deep px-4 py-2 font-mono text-xs font-semibold uppercase tracking-plate text-operators-ivory hover:bg-patch-amber-deep/90'
+/** The primary action ground (default variant — the new world's emphasis). */
+export const DIALOG_PRIMARY_CLASS = buttonVariants({ variant: 'default' })
 
-export const DIALOG_INK_CLASS =
-  'rounded-plug bg-slate-ink px-4 py-2 font-mono text-xs font-semibold uppercase tracking-plate text-operators-ivory hover:bg-slate-ink/90'
+/** Alias kept for existing call sites; same emphasis as the primary. */
+export const DIALOG_INK_CLASS = buttonVariants({ variant: 'default' })

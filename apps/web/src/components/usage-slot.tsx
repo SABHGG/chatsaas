@@ -5,11 +5,12 @@ import { creditBalanceSchema } from '@/lib/api-schemas'
 import { proxyRequest } from '@/lib/bff-request'
 import { ApiError, asApiError } from '@/lib/api-errors'
 import { useHydrated } from '@/lib/use-hydrated'
+import { Badge } from '@/components/ui/badge'
 import { ALMOST_OUT_LABEL, ON_HOLD_LABEL, meterStatus } from './usage-meter'
 
 /**
  * The compact credits pill in the board header (WI-007 Task 12 layout,
- * Index Rail revision): fetches the prepaid credit balance through the
+ * strip-rack revision): fetches the prepaid credit balance through the
  * BFF proxy once the component is hydrated (DC-007-5 — the pill never
  * reads server state that could differ across the boundary).
  *
@@ -55,11 +56,12 @@ export function UsageSlot() {
   }
 
   return (
-    <span
+    <Badge
       data-testid="usage-slot-compact"
-      className="inline-flex shrink-0 items-center rounded-plate bg-slate-ink px-2.5 py-1 font-mono text-xs uppercase tracking-plate text-operators-ivory lg:hidden"
+      variant="default"
+      className="shrink-0 lg:hidden"
     >
       {pillText}
-    </span>
+    </Badge>
   )
 }

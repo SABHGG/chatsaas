@@ -1,112 +1,295 @@
 @import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
 
 /*
- * The Operator's Board — design tokens (ADR-007 / DC-007-1).
+ * chatSaaS — the Flight-Strip Control Board.
  *
- * Tailwind v4 is CSS-first: tokens live in `@theme`, there is no
- * tailwind.config.ts. Named rules are structurally encoded here:
+ * Tailwind v4 is CSS-first: the shadcn variable set lives in `:root` /
+ * `.dark` and registers as utilities through `@theme inline`. There is
+ * no tailwind.config.ts; components style themselves with the standard
+ * shadcn utilities plus the flight-strip grammar layer at the foot of
+ * this file (rule-doubled, stamp-dashed, chase-pulse, hold-bar,
+ * press-travel, readout-mono, label-mono, and the two lift shadows).
  *
- * - Live Line Rule: `patch-amber` exists as a *surface* token only.
- *   There is no amber text token except `patch-amber-deep`, which exists
- *   solely because amber-on-ivory fails the 4.5:1 contrast floor. Amber
- *   must never become a background wash; components ration it to the lit
- *   jack and the primary create/publish control.
- * - Flat-by-Default Rule: the only shadow token in the system is
- *   `--shadow-live-jack`, reserved for the lit jack at publish.
- * - No dark mode (DC-007-4): `color-scheme` is pinned to light.
+ * The world: cool rack-metal gray ground, warm paper strips, near-black
+ * ink, and ONE inscription red (--stamp) reserved for the live stamp,
+ * the NEW LINE lever, and destructive-family intents. No gradients.
+ *
+ * Dark mode is an explicit follow-up: the variables below stay defined
+ * so shadcn primitives keep their contract, but nothing toggles `.dark`
+ * and `color-scheme` is pinned to light — no `.dark` rendering leaks.
  */
-@theme {
-  /* The committed palette */
-  --color-patch-amber: #b8860b;
-  --color-operators-ivory: #f8f4e9;
-  --color-slate-ink: #2d3142;
-  --color-hairline-slate: #d6d2c4;
+:root {
+  --background: #e8eaec; /* cool rack-metal gray — the ground is not white */
+  --foreground: #16181a; /* ink */
+  --card: #fbfaf7; /* warm paper strip */
+  --card-foreground: #16181a;
+  --popover: #fbfaf7;
+  --popover-foreground: #16181a;
+  --primary: #16181a; /* ink-solid primary controls */
+  --primary-foreground: #f7f6f1;
+  --secondary: #edece7; /* paper-dim */
+  --secondary-foreground: #16181a;
+  --muted: #e4e4e0; /* paper-dim tracks and quiet grounds */
+  --muted-foreground: #565a57;
+  --accent: #f2f0ea; /* paper hover/selection ground */
+  --accent-foreground: #16181a;
+  --destructive: #c8331f; /* the stamp red — destructive-family intents */
+  --border: #c9cbc8; /* hairline */
+  --input: #c9cbc8;
+  --ring: #16181a; /* ink focus */
+  --stamp: #c8331f; /* inscription red — the ONLY saturated color */
+  --chart-1: #c9cbc8;
+  --chart-2: #9a9d9b;
+  --chart-3: #6f726f;
+  --chart-4: #3f4240;
+  --chart-5: #16181a;
+  --radius: 0.125rem; /* squared, strip-like */
+  --sidebar: #e4e6e8;
+  --sidebar-foreground: #16181a;
+  --sidebar-primary: #16181a;
+  --sidebar-primary-foreground: #f7f6f1;
+  --sidebar-accent: #edece7;
+  --sidebar-accent-foreground: #16181a;
+  --sidebar-border: #c9cbc8;
+  --sidebar-ring: #16181a;
+}
 
-  /* Text-safe amber: amber itself is ~3:1 on ivory (surface-only); this
-     darker step clears 4.5:1 for the rare case amber must appear as text. */
-  --color-patch-amber-deep: #8a6508;
-
-  /* Tonal layering on the ivory ground (depth without shadows) */
-  --color-panel-warm: #fdfbf4;
-  --color-well-warm: #ede7d3;
-
-  /* Jack-and-plug geometry */
-  --radius-jack: 9999px; /* the circular jack — always a perfect circle */
-  --radius-plug: 9999px; /* the plug (primary create/publish control) */
-  --radius-card: 14px; /* gently rounded jack-card rectangles */
-  --radius-plate: 6px; /* engraved-plate labels and small controls */
-
-  /* Engraved plate letter spacing for mono labels (Jack Label Rule) */
-  --tracking-plate: 0.08em;
-
-  /* The single elevated moment in the system: the lit jack at publish.
-     Offset + soft blur per the craft floor — never a flat halo. */
-  --shadow-live-jack: 0 2px 12px 0 rgb(184 134 11 / 0.35);
-
-  /*
-   * The one authored motion in the system (ADR-007): the patch-cord
-   * "click" when a line is plugged in at publish. The jack presses in,
-   * settles, and its shadow blooms to the resting live-jack shadow.
-   * Opt-in only (`justPlugged` on JackCard) — the board never animates
-   * for decoration.
-   */
-  --animate-jack-click: jack-click 450ms cubic-bezier(0.22, 1, 0.36, 1) 1;
-
-  @keyframes jack-click {
-    0% {
-      transform: scale(0.85);
-      box-shadow: 0 0 0 0 rgb(184 134 11 / 0);
-    }
-    55% {
-      transform: scale(1.06);
-      box-shadow: 0 2px 18px 0 rgb(184 134 11 / 0.45);
-    }
-    100% {
-      transform: scale(1);
-      box-shadow: var(--shadow-live-jack);
-    }
-  }
+/*
+ * Defined for the shadcn contract only — there is no dark toggle in this
+ * work item and no `.dark` class is ever applied to the document.
+ */
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.922 0 0);
+  --sidebar-primary-foreground: oklch(0.205 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
 }
 
 /*
  * Fonts load through next/font and expose CSS variables on <html>;
  * `inline` makes utilities reference those variables directly.
- * Inter is the workhorse sans for body and data; IBM Plex Mono is the
- * machined label voice (jack labels, URLs, embed code).
+ * Inter is the grotesk for prose; IBM Plex Mono is LOAD-BEARING — the
+ * typewriter voice for every readout, stamp, and instrument label.
  */
 @theme inline {
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-sans);
   --font-mono: var(--font-ibm-plex-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-heading: var(--font-sans);
+  --color-stamp: var(--stamp);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
 }
 
 @layer base {
   html {
-    /* Day-lit panel only — no dark mode in this work item (DC-007-4). */
+    /* Light scheme only — dark mode is an explicit follow-up. */
     color-scheme: light;
-  }
-
-  body {
-    background-color: var(--color-operators-ivory);
-    color: var(--color-slate-ink);
-    caret-color: var(--color-slate-ink);
-  }
-
-  /* Focus is ink on ivory — never the blue SaaS default. The radius
-     falls back to the 6px plate step. */
-  :focus-visible {
-    outline: 2px solid var(--color-slate-ink);
-    outline-offset: 2px;
-    border-radius: var(--radius-plate);
-  }
-
-  /* Browser surfaces carry the design too (craft floor). */
-  ::selection {
-    background-color: var(--color-slate-ink);
-    color: var(--color-operators-ivory);
+    @apply font-sans;
+    /* Browser surfaces carry the world: ink caret, ink selection. */
+    caret-color: var(--foreground);
   }
 
   * {
+    @apply border-border outline-ring/50;
     scrollbar-width: thin;
-    scrollbar-color: var(--color-hairline-slate) transparent;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  ::selection {
+    background: var(--foreground);
+    color: var(--background);
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 0;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+/*
+ * Flight-strip grammar — the shared state language, defined once.
+ * State is carried by stamp, dash, and doubling — never by hue alone.
+ */
+@layer components {
+  /* Monospaced instrument readout: every quantity speaks in mono. */
+  .readout-mono {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* The typewriter label: rack headers, stamps, legend, section marks. */
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  /* live: a DOUBLED rule under the line name — doubling means live. */
+  .rule-doubled {
+    text-decoration-line: underline;
+    text-decoration-style: double;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 4px;
+  }
+
+  /* connecting: the DASHED stamp outline, waiting to be pressed. */
+  .stamp-dashed {
+    border: 1px dashed color-mix(in oklab, var(--foreground) 72%, transparent);
+  }
+
+  /* connecting: the chase-light pulse — the ONE moving light on any
+     surface; everything else on the board sits still. */
+  .chase-pulse {
+    animation: chase-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes chase-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  /* on hold: the full-width bar crossing the strip. */
+  .hold-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 1;
+    background: var(--foreground);
+    color: var(--background);
+    font-family: var(--font-mono);
+    font-size: 0.625rem;
+    line-height: 1.25rem;
+    letter-spacing: 0.35em;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  /* Controls travel: levers and buttons visibly depress — engagement
+     never depends on color alone. */
+  .press-travel {
+    transition:
+      transform 90ms ease-out,
+      box-shadow 90ms ease-out;
+  }
+
+  .press-travel:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow: inset 0 2px 4px rgb(22 24 26 / 0.4);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chase-pulse {
+      animation: none;
+    }
+
+    .press-travel,
+    .press-travel:active:not(:disabled) {
+      transition: none;
+      transform: none;
+    }
+  }
+
+  /* The pulled strip: the selected line lifted from the rack — offset
+     and soft blur, never a hard costume shadow. */
+  .shadow-strip-pull {
+    box-shadow:
+      0 10px 22px rgb(22 24 26 / 0.18),
+      0 2px 6px rgb(22 24 26 / 0.12);
+  }
+
+  /* Paper lifted off the desk: dialogs and the stamp press panel. */
+  .shadow-paper-lift {
+    box-shadow:
+      0 14px 32px rgb(22 24 26 / 0.16),
+      0 3px 8px rgb(22 24 26 / 0.08);
   }
 }
