@@ -5,6 +5,8 @@ date: 2026-08-28
 supersedes_date: 2026-08-24
 ---
 
+> **Partially superseded (2026-09-05):** the vector storage (Aurora Serverless v2), connection management (RDS Proxy) and credentials decisions are superseded by [ADR-008](008-use-neon-for-vector-store.md) (Neon). Bedrock, in-Lambda parsers, and Lambda orchestration remain in force.
+
 # ADR-004: AWS Service Selection for AI Capabilities
 
 ## Context
