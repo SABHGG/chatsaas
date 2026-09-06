@@ -67,3 +67,6 @@ next-env.d.ts
 .agents/
 .pi/
 .codex/
+
+# CodeGraph local index (generated, per-machine)
+.codegraph/
