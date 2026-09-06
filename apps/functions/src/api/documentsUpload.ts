@@ -45,11 +45,13 @@ function sniffMimeType(raw: Buffer): string | null {
   if (raw[0] === 0x25 && raw[1] === 0x50 && raw[2] === 0x44 && raw[3] === 0x46) {
     return 'application/pdf'
   }
-  // DOCX: ZIP-based (PK\x03\x04 or PK\x05\x06 or PK\x07\x08) with "word/" in central directory
+  // DOCX: ZIP-based (PK\x03\x04 or PK\x05\x06 or PK\x07\x08) with "word/" in
+  // the archive. The OOXML central directory sits at the END of the file, so
+  // the search must cover the whole buffer — a first-1KB probe misses most
+  // real DOCX files and falls through to the text branch, which would
+  // 400-reject every such upload as MIME_MISMATCH.
   if (raw[0] === 0x50 && raw[1] === 0x4b && (raw[2] === 0x03 || raw[2] === 0x05 || raw[2] === 0x07)) {
-    // Quick check for "word/" in the first 1KB (covers most DOCX)
-    const slice = raw.subarray(0, Math.min(raw.length, 1024))
-    if (slice.includes(Buffer.from('word/')) || slice.includes(Buffer.from('xl/')) || slice.includes(Buffer.from('ppt/'))) {
+    if (raw.includes(Buffer.from('word/')) || raw.includes(Buffer.from('xl/')) || raw.includes(Buffer.from('ppt/'))) {
       return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
     }
   }
@@ -187,8 +189,14 @@ const documentsUploadPlugin: FastifyPluginAsync<PluginOpts> = async (
       }
 
       // Content-sniffing: verify the claimed MIME matches actual file signature (JD-A-005).
+      // The text family relaxes one way: every decodable text file sniffs as
+      // `text/plain` (UTF-8 decoding never throws), so a legitimately
+      // claimed `text/markdown` must be accepted against that detection.
+      // Binary spoofing (a PDF/exe renamed to .md) is still caught — those
+      // carry a binary signature the sniffer detects before the text branch.
       const detected = sniffMimeType(raw)
-      if (detected && detected !== mimeType) {
+      const markdownClaimedOverText = detected === 'text/plain' && mimeType === 'text/markdown'
+      if (detected && detected !== mimeType && !markdownClaimedOverText) {
         return reply
           .code(400)
           .send({ success: false, error: 'MIME type does not match file content', code: 'MIME_MISMATCH' })
