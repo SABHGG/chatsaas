@@ -1,4 +1,8 @@
-import { chatbotListItemSchema } from './api-schemas'
+import {
+  chatbotListItemSchema,
+  chatbotListSchema,
+  type ChatbotListItem,
+} from './api-schemas'
 import { proxyRequest } from './bff-request'
 
 /**
@@ -49,14 +53,44 @@ export const writePlanRef = (operatorId: string, id: string) => writeRef(operato
 export const clearWizardRefs = clearRefs
 
 /**
+ * Stale-ref guard: verify the cached ref still points at a DRAFT
+ * chatbot before the wizard adopts it.
+ *
+ * A ref can outlive the draft it was minted for — publishing from the
+ * detail page spends the line without touching these refs — so a
+ * re-entered wizard would otherwise silently wire new documents into
+ * an already-published line. The company list is the status oracle
+ * (the API has no single-chatbot read, and archived bots are filtered
+ * out of it): a ref whose chatbot is missing or no longer a draft is
+ * discarded so the wizard proceeds as a fresh draft. An unverifiable
+ * ref (network/API failure) is never silently adopted — the error
+ * propagates to the caller.
+ */
+export async function verifyChatbotRef(operatorId: string): Promise<ChatbotListItem | null> {
+  const cached = readChatbotRef(operatorId)
+  if (!cached) return null
+
+  const fleet = await proxyRequest('/chatbots', { dataSchema: chatbotListSchema })
+  const match = fleet.find((bot) => bot.id === cached)
+  if (match && match.status === 'draft') return match
+
+  clearRefs(operatorId)
+  return null
+}
+
+/**
  * Return the chatbot id behind the current draft, creating the draft
  * chatbot on the API the first time it is needed. The draft is created
  * exactly once per wizard run: the id is cached in sessionStorage before
  * the second call can ever reach the API.
+ *
+ * Adoption is guarded by {@link verifyChatbotRef}: a cached ref is only
+ * reused while its chatbot is still a draft; a spent ref is discarded
+ * and a fresh draft is minted instead.
  */
 export async function ensureDraftChatbot(operatorId: string, name: string): Promise<string> {
-  const cached = readChatbotRef(operatorId)
-  if (cached) return cached
+  const adoptable = await verifyChatbotRef(operatorId)
+  if (adoptable) return adoptable.id
 
   const created = await proxyRequest('/chatbots', {
     method: 'POST',

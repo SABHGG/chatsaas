@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 /**
  * WI-007 Task 11: wizard step guards and the DC-007-2 publish gate.
@@ -163,6 +163,91 @@ describe('step 1 — name the line', () => {  it('mints the draft chatbot once a
   })
 })
 
+describe('stale wizard state guards', () => {
+  it('step 1 clears a persisted draft whose chatbot was already published', async () => {
+    seedDraft('Front Desk')
+    window.sessionStorage.setItem(CHATBOT_REF, 'bot-1')
+    // The status oracle is the company list (no single-chatbot read).
+    proxyMock.mockResolvedValue([{ ...BOT_LIKE, status: 'published' }])
+
+    renderStep(<WizardNamePage />)
+
+    // The stale name must not pre-fill the input: continuing with it
+    // would mint a duplicate of the published line.
+    await waitFor(() => {
+      const input = screen.getByTestId('wizard-name-input') as HTMLInputElement
+      expect(input.value).toBe('')
+    })
+    expect(window.sessionStorage.getItem(CHATBOT_REF)).toBeNull()
+    expect(proxyMock).not.toHaveBeenCalledWith(
+      '/chatbots',
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('step 1 keeps the persisted name while the draft is verifiably in progress', async () => {
+    seedDraft('Front Desk')
+    window.sessionStorage.setItem(CHATBOT_REF, 'bot-1')
+    proxyMock.mockResolvedValue([{ ...BOT_LIKE }])
+
+    renderStep(<WizardNamePage />)
+    await act(async () => {})
+
+    // R-3 holds: a mid-run draft survives — the guard only spends
+    // drafts whose chatbot left the draft state.
+    expect((screen.getByTestId('wizard-name-input') as HTMLInputElement).value).toBe('Front Desk')
+    expect(window.sessionStorage.getItem(CHATBOT_REF)).toBe('bot-1')
+  })
+
+  it('step 1 does not verify anything when no chatbot was minted yet', async () => {
+    seedDraft('Front Desk')
+
+    renderStep(<WizardNamePage />)
+    await act(async () => {})
+
+    expect(proxyMock).not.toHaveBeenCalled()
+    expect((screen.getByTestId('wizard-name-input') as HTMLInputElement).value).toBe('Front Desk')
+  })
+
+  it('documents entry discards a published ref and wires into a fresh draft', async () => {
+    seedDraft('Front Desk')
+    window.sessionStorage.setItem(CHATBOT_REF, 'bot-1')
+    proxyMock.mockImplementation(async (path: string, options?: { method?: string }) => {
+      if (path === '/chatbots' && options?.method === 'POST') return { ...BOT_LIKE, id: 'bot-2' }
+      if (path === '/chatbots') return [{ ...BOT_LIKE, id: 'bot-1', status: 'published' }]
+      throw new Error(`unexpected proxy call: ${path}`)
+    })
+
+    renderStep(<WizardDocumentsPage />)
+
+    // The dropzone wires into the NEW draft, never the published line.
+    const zone = await screen.findByTestId('file-dropzone')
+    expect(zone).toBeTruthy()
+    expect(screen.getByRole('button', { name: /add documents for bot-2/i })).toBeTruthy()
+    expect(proxyMock).toHaveBeenCalledWith(
+      '/chatbots',
+      expect.objectContaining({ method: 'POST', body: { name: 'Front Desk', description: null } }),
+    )
+    expect(window.sessionStorage.getItem(CHATBOT_REF)).toBe('bot-2')
+  })
+
+  it('documents entry adopts a ref whose chatbot is still a draft without re-minting', async () => {
+    seedDraft('Front Desk')
+    window.sessionStorage.setItem(CHATBOT_REF, 'bot-1')
+    proxyMock.mockResolvedValue([{ ...BOT_LIKE }])
+
+    renderStep(<WizardDocumentsPage />)
+
+    expect(await screen.findByTestId('file-dropzone')).toBeTruthy()
+    expect(screen.getByRole('button', { name: /add documents for bot-1/i })).toBeTruthy()
+    expect(proxyMock).not.toHaveBeenCalledWith(
+      '/chatbots',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(window.sessionStorage.getItem(CHATBOT_REF)).toBe('bot-1')
+  })
+})
+
 describe('DC-007-2 — publishing with 0 ready documents is gated behind the dialog', () => {
   /** Wait until the publish page has resolved readiness (no click races). */
   async function waitForReadiness() {
@@ -212,11 +297,11 @@ describe('DC-007-2 — publishing with 0 ready documents is gated behind the dia
       ),
     )
 
-    // The plug moment: the lit jack plays the ONE patch-cord click —
+    // The stamp moment: the red LIVE stamp presses onto the strip —
     // Motion's spring, remounted from scale 0.6 on the plugged screen.
     await waitFor(() => {
       const jack = document.querySelector('[data-testid="jack-body"]') as HTMLElement
-      expect(jack.className).toContain('bg-patch-amber')
+      expect(jack.classList.contains('bg-stamp')).toBe(true)
       expect(jack.style.transform).toContain('scale')
     })
 
