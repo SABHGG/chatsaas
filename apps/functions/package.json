@@ -24,6 +24,7 @@
     "@chatsaas/types": "workspace:*",
     "@fastify/cors": "^11.3.0",
     "@langchain/aws": "^1.4.4",
+    "@neondatabase/serverless": "^1.1.0",
     "fastify": "^5.12.1",
     "jose": "^5.10.0",
     "langchain": "^1.5.10",
