@@ -11,6 +11,12 @@ import { plansAvailablePlugin } from './api/plansAvailable'
 import { plansSubscribePlugin } from './api/plansSubscribe'
 import { contentGetPlugin } from './api/contentGet'
 import { chatPublicPlugin } from './api/chatPublic'
+import { documentsUploadPlugin } from './api/documentsUpload'
+import { documentsListPlugin } from './api/documentsList'
+import { documentGetPlugin } from './api/documentGet'
+import { chatPublicMessagePlugin, chatRouteEnvFromProcess } from './api/chatPublicMessage'
+import { chatbotsPlugin } from './api/chatbots'
+import { chatbotsPublicPlugin } from './api/chatbotsPublic'
 
 /**
  * Public surface — these routes skip the Cognito JWT verification. Everything
@@ -42,6 +48,19 @@ export interface CreateServerOptions {
    * Disable request logging. Default: `false` (logger is enabled).
    */
   loggerDisabled?: boolean
+  /**
+   * Documents bucket name (WI-005). Required to register the upload route.
+   * If omitted, the upload / list / get routes are not mounted.
+   */
+  documentsBucket?: string
+  /**
+   * Documents DynamoDB table name (WI-005). Required to register the upload / list / get routes.
+   */
+  documentsTable?: string
+  /**
+   * Chatbots DynamoDB table name (WI-005). Required for cross-tenant ownership checks in upload/list routes.
+   */
+  chatbotsTable?: string
 }
 
 export interface CreateServerDeps {
@@ -163,6 +182,10 @@ export async function createServer(
       return reply.code(fastifyErr.statusCode).send({
         success: false,
         error: fastifyErr.message ?? 'Bad request',
+        // Route error schemas require `code`; parser-level errors (415, 413)
+        // carry none. Emit a generic one instead of letting response
+        // serialization fail and mask the real status with an empty 500.
+        code: 'REQUEST_ERROR',
       })
     }
     reply.log.error({ err }, 'unhandled error')
@@ -198,11 +221,81 @@ export async function createServer(
     preHook: deps.userPreHook,
   })
 
+  // WI-005 ingest routes. Mounted only when both env vars are configured so
+  // existing tests of the chat surface keep running without DynamoDB / S3.
+  const documentsBucket = opts.documentsBucket ?? process.env.DOCUMENTS_BUCKET
+  const documentsTable = opts.documentsTable ?? process.env.DOCUMENTS_TABLE
+  const chatbotsTable = opts.chatbotsTable ?? process.env.CHATBOTS_TABLE_NAME
+  if (documentsBucket && documentsTable && chatbotsTable) {
+    await fastify.register(documentsUploadPlugin, {
+      prefix: '/api/chatbots',
+      preHook: deps.userPreHook,
+      documentsBucket,
+      documentsTable,
+      chatbotsTable,
+    })
+    await fastify.register(documentsListPlugin, {
+      prefix: '/api/chatbots',
+      preHook: deps.userPreHook,
+      documentsTable,
+      chatbotsTable,
+    })
+    await fastify.register(documentGetPlugin, {
+      prefix: '/api/documents',
+      preHook: deps.userPreHook,
+      documentsTable,
+    })
+  } else {
+    fastify.log.warn(
+      'WI-005 document routes disabled: DOCUMENTS_BUCKET, DOCUMENTS_TABLE, and/or CHATBOTS_TABLE_NAME not set'
+    )
+  }
+
   // Mount the public chat surface. It stays anonymous by design (chatbots
   // are publicly embedded), so no hook is attached here.
+  // WI-001 chatbot management + publishing surface. Mounted when the
+  // chatbots table is configured; documentsTable is optional (it only
+  // feeds document_count on list responses).
+  if (chatbotsTable) {
+    await fastify.register(chatbotsPlugin, {
+      prefix: '/api/chatbots',
+      preHook: deps.userPreHook,
+      chatbotsTable,
+      documentsTable,
+    })
+  } else {
+    fastify.log.warn(
+      'WI-001 chatbot management routes disabled: CHATBOTS_TABLE_NAME not set'
+    )
+  }
+
+  // WI-001 public widget surface. Anonymous (no JWT preHook); only
+  // published chatbot rows are served, so the row is the tenant source.
+  if (chatbotsTable) {
+    await fastify.register(chatbotsPublicPlugin, {
+      prefix: '/api/public/chatbots',
+      chatbotsTable,
+    })
+  }
+
   await fastify.register(chatPublicPlugin, {
     prefix: '/api/chat/public',
   })
+
+  // WI-006 public retrieval+chat surface. Anonymous (no JWT preHook); the
+  // chatbot row is the tenant-scope source. Mounted only when the full env
+  // set is present so legacy tests keep running without RDS/Bedrock.
+  const chatRouteEnv = chatRouteEnvFromProcess()
+  if (chatRouteEnv) {
+    await fastify.register(chatPublicMessagePlugin, {
+      prefix: '/api/public/chat',
+      env: chatRouteEnv,
+    })
+  } else {
+    fastify.log.warn(
+      'WI-006 public chat route disabled: missing one of CHATBOTS_TABLE_NAME, CONVERSATIONS_TABLE_NAME, MESSAGES_TABLE_NAME, SUBSCRIPTIONS_TABLE_NAME, CREDITS_TABLE_NAME, RDS_CLUSTER_ARN, RDS_SECRET_ARN, RDS_DATABASE, BEDROCK_EMBED_MODEL_ID, CHAT_MODEL_ID',
+    )
+  }
 
   // Light health endpoint. Useful in Lambda container startup probes too.
   fastify.get('/healthz', async () => ({ status: 'ok' }))
@@ -238,7 +331,7 @@ export async function startServer(): Promise<void> {
   }
 
   const port = Number(process.env.PORT ?? 3001)
-  const host = process.env.HOST ?? '0.0.0.0'
+  const host = process.env.HOST ?? '0.00.0.0'
 
   const fastify = await createServer({
     cognito: cognitoConfigForCognito(

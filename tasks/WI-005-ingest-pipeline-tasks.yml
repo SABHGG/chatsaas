@@ -1,0 +1,142 @@
+# WI-005 Ingest Pipeline Tasks
+
+## Change
+- **Name**: WI-005-ingest-pipeline
+- **Based on**: ADR-004 (2026-08-28 revision) + post-WI-003 decisions + WI-008 chain of custody (DC-005-1 RESOLVED)
+- **Artifact store**: Kaddo
+- **Branch**: feature/post-wi-003-rag-infra
+- **Tests**: vitest + AWS SDK mocks; integration smoke against a dev Aurora cluster
+- **Dependency**: WI-004 (ready) MUST be deployed first; depends on WI-008's AC-13 + AC-14 for tenant custody
+
+## Decisions resolved (2026-08-28)
+- DC-005-1: sub→company_id mapping lives in WI-008 (chain of custody: post-confirmation Lambda is sole writer of immutable `custom:company_id`).
+- DC-005-2: model id `amazon.titan-embed-text-v2:0` (8k context default).
+- DC-005-3: chunk size 1000 chars / overlap 200.
+- DC-005-4: S3 bucket lives in this WI (not WI-004).
+- DC-005-5: RDS Data API for v1; fallback to `pg` through proxy via env var.
+
+## Tasks (implementation order)
+
+### 1. Confirm WI-008 chain of custody
+- [ ] Verify WI-008 AC-13 (`writeAttributes` whitelist excludes `custom:company_id`) and AC-14 (sole IAM principal with `AdminUpdateUserAttributes` is the post-confirmation Lambda) are landed before any code in this WI is implemented.
+- [ ] Update `apps/functions/src/auth/claims.ts` SECURITY NOTE to describe the custody chain.
+- [ ] Add a top-of-file comment in `apps/functions/src/ingest/resolveTenant.ts` referencing WI-008's AC-13 + AC-14.
+- **Dependencies**: WI-008 implementation complete.
+
+### 2. CDK: documents S3 bucket
+- [ ] Create `infra/lib/ingest-bucket.ts` construct.
+- [ ] SSE-S3, versioning enabled, lifecycle to IA at 30d, Glacier at 180d.
+- [ ] `EventBridgeEnabled: true`, public access block on.
+- [ ] No bucket policy; Lambda IAM is sufficient.
+- **Dependencies**: Task 1.
+
+### 3. CDK: IngestLambda construct
+- [ ] Node 24, 1024 MB, 300 s timeout.
+- [ ] Env vars from SSM Parameter Store: `RDS_PROXY_ENDPOINT`, `RDS_PROXY_SECRET_ARN`, `BEDROCK_EMBED_MODEL_ID=amazon.titan-embed-text-v2:0`, `DOCUMENTS_BUCKET`, `CHUNK_SIZE=1000`, `CHUNK_OVERLAP=200`, `DB_CONNECTION_MODE=data_api`.
+- [ ] DLQ via SQS.
+- [ ] Log group with 30-day retention.
+- [ ] IAM: `s3:GetObject` on the documents bucket, `bedrock:InvokeModel` on the Titan v2 model, `rds-data:ExecuteStatement` on the cluster, `sqs:SendMessage` on the DLQ.
+- **Dependencies**: Task 2.
+
+### 4. CDK: EventBridge rule
+- [ ] Pattern: `s3:ObjectCreated:Put` on the documents bucket.
+- [ ] Target: IngestLambda.
+- [ ] Retry policy: AWS default (24 h, 60 s backoff).
+- [ ] DLQ on the rule.
+- **Dependencies**: Tasks 2, 3.
+
+### 5. CDK: unique index on `(chatbot_id, content_sha256)`
+- [ ] Create `infra/lib/ingest-embeddings-index.ts` custom resource.
+- [ ] SQL: `ALTER TABLE IF EXISTS public.embeddings ADD COLUMN IF NOT EXISTS content_sha256 BYTEA;` then `CREATE UNIQUE INDEX IF NOT EXISTS embeddings_chatbot_content_sha256_idx ON public.embeddings (chatbot_id, content_sha256);` then `ANALYZE public.embeddings;`.
+- [ ] Idempotent: re-running the custom resource is a no-op.
+- **Dependencies**: WI-004 deployed.
+
+### 6. packages: dependencies
+- [ ] Add to `apps/functions/package.json`: `@aws-sdk/client-bedrock-runtime@^3.1116.0`, `@aws-sdk/client-rds-data@^3.1116.0`, `@aws-sdk/client-sqs@^3.1116.0`, `pdf-parse@^1`, `mammoth@^1`, `langchain@^1`.
+- [ ] No additions to `infra/package.json` beyond what WI-004 already declares.
+- **Dependencies**: none.
+
+### 7. Functions: `resolveTenant` module
+- [ ] Reads the verified JWT from the request.
+- [ ] Returns `{ sub, companyId, chatbotId }` from the JWT claim (`custom:company_id`) and the path param.
+- [ ] Asserts the chatbot belongs to the company (lookup in DynamoDB `chatbots` table by `chatbotId`, check `company_id` matches).
+- [ ] Throws 403 on mismatch.
+- [ ] Unit test asserts that body/query `company_id` fields do NOT influence the returned tenant.
+- **Dependencies**: Task 1.
+
+### 8. Functions: parser modules
+- [ ] `apps/functions/src/ingest/parsePdf.ts` — wraps `pdf-parse`; returns `string[]` (page-level).
+- [ ] `apps/functions/src/ingest/parseDocx.ts` — wraps `mammoth.extractRawText`; returns `string`.
+- [ ] `apps/functions/src/ingest/parseText.ts` — UTF-8 decode, strip BOM, normalize line endings.
+- [ ] Each module is pure; unit tests with fixtures in `__fixtures__/`.
+- **Dependencies**: Task 6.
+
+### 9. Functions: splitter module
+- [ ] `apps/functions/src/ingest/splitter.ts` — wraps `RecursiveCharacterTextSplitter` from `langchain/text_splitter`.
+- [ ] Defaults: `chunkSize=1000`, `chunkOverlap=200`, separators `['\n\n', '\n', '. ', ' ', '']`.
+- [ ] Each chunk carries `{ content, contentSha256, index }`.
+- [ ] SHA-256 over the chunk content (UTF-8) → 32-byte `BYTEA`.
+- **Dependencies**: Task 6.
+
+### 10. Functions: `embedBedrock` module
+- [ ] Wraps `InvokeModelCommand` for `amazon.titan-embed-text-v2:0`.
+- [ ] Batch up to 25 chunks per call.
+- [ ] Returns `number[][]` of length-1024 vectors.
+- [ ] Bounded exponential backoff with jitter on `ThrottlingException` (5 attempts, base 200 ms, cap 5 s).
+- [ ] No retry on `ValidationException` / `AccessDeniedException`.
+- **Dependencies**: Task 6.
+
+### 11. Functions: `persistEmbeddings` module
+- [ ] Connects via RDS Data API (default) or `pg` through RDS Proxy (env switch).
+- [ ] For each chunk:
+  ```sql
+  INSERT INTO public.embeddings (id, chatbot_id, company_id, content, content_sha256, embedding)
+  VALUES ($1, $2, $3, $4, $5, $6::vector)
+  ON CONFLICT (chatbot_id, content_sha256) DO NOTHING;
+  ```
+- [ ] Returns count of newly-inserted rows.
+- **Dependencies**: Tasks 5, 9, 10.
+
+### 12. Functions: IngestLambda handler
+- [ ] Glues 8 → 9 → 10 → 11.
+- [ ] Manages `Document.status` state machine: `uploaded → processing → ready` (or `failed`).
+- [ ] Structured JSON logs (request_id, document_id, chatbot_id, company_id, chunk_index, embedding_model_id, latency_ms, error_class).
+- [ ] DLQ + marker file on terminal failure.
+- **Dependencies**: Tasks 7, 8, 9, 10, 11.
+
+### 13. Functions: admin routes
+- [ ] `POST /api/chatbots/:chatbotId/documents` — multipart, 10 MB, .pdf/.docx/.txt/.md, returns 201 with the Document row.
+- [ ] `GET /api/chatbots/:chatbotId/documents` — lists Documents for the chatbot.
+- [ ] `GET /api/documents/:documentId` — single-document status.
+- [ ] All three behind the same Cognito JWT preHook as the existing admin routes.
+- **Dependencies**: Tasks 1, 7.
+
+### 14. Functions: register routes in `server.ts`
+- [ ] Mount the three new factories under `/api/chatbots` and `/api/documents`.
+- [ ] Verify the existing 19 vitest cases + the new test cases all pass.
+- **Dependencies**: Task 13.
+
+### 15. Tests: integration smoke
+- [ ] Vitest integration test that mounts LocalStack S3 + LocalStack EventBridge + stub Bedrock + testcontainers Postgres with `vector` extension.
+- [ ] Uploads a 4-page fixture PDF and asserts the full state machine lands at `Document.status: ready` and the expected `embeddings` row count.
+- [ ] Test that a second upload of the same bytes produces zero new rows (idempotency).
+- **Dependencies**: Task 14, infra:localstack running.
+
+### 16. Docs
+- [ ] `apps/functions/README.md`: document the S3 → EventBridge → Lambda contract, the chunk size defaults, the DLQ + marker-file failure mode, the tenant-isolation invariant.
+- [ ] `infra/README.md`: document the new env vars and the deploy smoke.
+- **Dependencies**: Tasks 14, 15.
+
+## Risks
+- R-1 (CRITICAL) tenant isolation: `company_id` MUST come from the JWT (post WI-008 chain of custody); body/query fields are ignored. Code comment + unit test enforces.
+- R-3 Bedrock throttling: batch + backoff.
+- R-7 empty-chunk handling: drop empty chunks before embed, log warning.
+
+## Validation
+- `pnpm -F infra synth` produces the four new resources.
+- `pnpm -F infra test` is green.
+- `pnpm -F functions type-check` is clean.
+- `pnpm -F functions test` is green (legacy + new).
+- `kaddo guard` returns 0 findings.
+- `kaddo questions` returns 0 new blocking questions.
+- Manual end-to-end smoke: upload a PDF, observe `Document.status: ready` + N rows in `public.embeddings` within 60 s.

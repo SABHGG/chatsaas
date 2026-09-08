@@ -1,0 +1,218 @@
+openapi: 3.1.0
+info:
+  title: WI-006 Retrieval + Chat Handler API
+  description: >
+    Public anonymous chatbot message endpoint. Resolves the chatbot scope from
+    the chatbot row (R-1), checks ADR-005 conversation limits, atomically debits
+    prepaid credits (R-2), embeds the question with Bedrock Titan v2, retrieves
+    top-K chunks from Aurora pgvector, builds a delimited prompt (R-4), completes
+    with Bedrock Claude 3.5 Sonnet, persists the turn with exact token counts
+    (R-8), and increments the monthly usage counter.
+  version: "1.0.0"
+  contact:
+    name: chatsaas Team
+servers:
+  - url: http://localhost:3000/api
+    description: Local development server
+paths:
+  /api/public/chat/{chatbotId}/message:
+    post:
+      summary: Send a visitor message to a published chatbot (anonymous)
+      description: >
+        Anonymous endpoint (no JWT). The chatbot must be published. Latency
+        budget: p50 < 3 s, p95 < 8 s. Streaming (SSE) is explicitly out of scope.
+        When the knowledge base has zero retrieval rows the configured fallback
+        answer is returned (AC 9).
+      operationId: sendPublicChatMessage
+      tags:
+        - Public Chat
+      parameters:
+        - name: chatbotId
+          in: path
+          required: true
+          description: Chatbot identifier (UUID). The owning company is resolved server-side from the chatbot row.
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: The visitor's question. No history or tenant fields are accepted (R-6, R-1).
+                conversation_id:
+                  type: string
+                  format: uuid
+                  description: >
+                    Optional conversation to continue. Honored only when the
+                    conversation row belongs to the same chatbot and company;
+                    otherwise a fresh conversation is started.
+              required:
+                - message
+              additionalProperties: false
+            examples:
+              firstTurn:
+                summary: First turn of a conversation
+                value:
+                  message: "What is the refund policy?"
+              followUp:
+                summary: Follow-up turn
+                value:
+                  message: "And for digital products?"
+                  conversation_id: "11111111-1111-4111-8111-111111111111"
+      responses:
+        "200":
+          description: Successful completion
+          headers:
+            x-credit-alert:
+              description: Present when the company's monthly usage crossed the 80% threshold.
+              schema:
+                type: string
+                enum:
+                  - "80%"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      answer:
+                        type: string
+                        description: Assistant answer (grounded on retrieved chunks, or the configured fallback).
+                      conversation_id:
+                        type: string
+                        format: uuid
+                        description: Conversation id to send back on follow-up turns.
+                      sources:
+                        type: array
+                        description: Retrieved chunks used as grounding (empty when the fallback was returned).
+                        items:
+                          type: object
+                          properties:
+                            id:
+                              type: string
+                            content:
+                              type: string
+                            score:
+                              type: number
+                              description: pgvector cosine distance score (lower is closer).
+                          required:
+                            - id
+                            - content
+                            - score
+                          additionalProperties: false
+                    required:
+                      - answer
+                      - conversation_id
+                      - sources
+                    additionalProperties: false
+                required:
+                  - data
+                additionalProperties: false
+              examples:
+                grounded:
+                  summary: Grounded answer with sources
+                  value:
+                    data:
+                      answer: "The refund policy allows returns within 30 days of purchase."
+                      conversation_id: "22222222-2222-4222-8222-222222222222"
+                      sources:
+                        - id: "r1"
+                          content: "Refunds are accepted within 30 days..."
+                          score: 0.12
+                fallback:
+                  summary: Empty knowledge base (AC 9)
+                  value:
+                    data:
+                      answer: "I'm sorry — I don't have information about that in my knowledge base yet."
+                      conversation_id: "33333333-3333-4333-8333-333333333333"
+                      sources: []
+        "400":
+          description: Validation failed (strict body; extra fields such as company_id or history are rejected)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                extraField:
+                  value:
+                    error: "Validation failed"
+                    details:
+                      - code: "unrecognized_keys"
+                        path: []
+                    path: "/api/public/chat/chat-1/message"
+                    timestamp: "2026-08-29T20:00:00.000Z"
+        "402":
+          description: Conversation limits exhausted (ADR-005 hard block) or prepaid credits exhausted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                monthlyLimit:
+                  value:
+                    error: "Company reached its monthly conversation limit"
+                    path: "/api/public/chat/chat-1/message"
+                    timestamp: "2026-08-29T20:00:00.000Z"
+                prepaid:
+                  value:
+                    error: "Insufficient prepaid credits"
+                    path: "/api/public/chat/chat-1/message"
+                    timestamp: "2026-08-29T20:00:00.000Z"
+        "404":
+          description: Chatbot not found, or not published (draft/archived deliberately return 404, not 403, to avoid leaking existence)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                notPublished:
+                  value:
+                    error: "Chatbot not found"
+                    path: "/api/public/chat/chat-1/message"
+                    timestamp: "2026-08-29T20:00:00.000Z"
+        "429":
+          description: Rate limit (100 requests/minute/IP per api-spec.md; middleware is a separate WI)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: Bedrock or database failure (internal details never leaked)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              examples:
+                bedrockRejected:
+                  value:
+                    error: "Internal server error"
+                    path: "/api/public/chat/chat-1/message"
+                    timestamp: "2026-08-29T20:00:00.000Z"
+components:
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        details:
+          description: Optional validation details.
+        path:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+      required:
+        - error
+        - path
+        - timestamp
+      additionalProperties: false

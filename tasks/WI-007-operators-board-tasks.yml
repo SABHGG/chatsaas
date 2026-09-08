@@ -1,0 +1,165 @@
+# WI-007 Operator's Board Tasks
+
+## Change
+- **Name**: WI-007-operators-board
+- **Based on**: ADR-007 (The Operator's Board visual world) + WI-005 (upload) + WI-006 (chat) + WI-008 (auth) + PRODUCT.md (English copy)
+- **Artifact store**: Kaddo
+- **Branch**: feature/post-wi-003-rag-infra
+- **Tests**: vitest + Playwright (e2e happy path)
+- **Dependencies**: WI-008 (auth), WI-005 (upload), WI-006 (chat) all implemented and deployed
+
+## Decisions resolved (2026-08-28)
+- DC-007-1: tokens (Patch Amber `#B8860B`, Operator's Ivory `#F8F4E9`, Slate Ink `#2D3142`, Hairline Slate `#D6D2C4`; Inter + IBM Plex Mono).
+- DC-007-2: permissive publish with 0 ready documents (confirmation dialog).
+- DC-007-3: "Contact us" modal placeholder for prepayment.
+- DC-007-4: NO dark mode in this WI (per ADR-007).
+- DC-007-5: per-component `useHydrated` guard.
+
+## Visual contract (ADR-007)
+- **Live Line Rule**: Patch Amber only on the lit jack of a published bot and the primary create/publish control.
+- **Jack Label Rule**: short, machine-precise labels; never a sentence.
+- **Flat-by-Default Rule**: surfaces flat at rest; only the lit jack at publish elevates.
+- **Line vocabulary**: unplugged / connecting / live / on hold.
+- **English copy only** per PRODUCT.md.
+
+## Tasks (implementation order)
+
+### 1. Reconcile existing scaffold
+- [ ] Delete `apps/web/src/app/(dashboard)/components/`.
+- [ ] Consolidate all components under `apps/web/src/components/`.
+- [ ] Remove blue-600 / Spanish copy placeholders from the tree.
+- [ ] `grep` check: no `bg-blue-*`, no Spanish copy strings remain.
+- **Dependencies**: none.
+
+### 2. Design tokens
+- [ ] Patch Amber, Operator's Ivory, Slate Ink, Hairline Slate in `apps/web/tailwind.config.ts`.
+- [ ] Inter + IBM Plex Mono in `apps/web/src/app/globals.css`.
+- [ ] Jack-and-plug radius scale.
+- [ ] Focus ring styles.
+- **Dependencies**: Task 1.
+
+### 3. `lib/api-client.ts` + `lib/api-errors.ts`
+- [ ] Typed fetch wrapper, Zod-validated responses.
+- [ ] `X-Requested-With: XMLHttpRequest` on mutations.
+- [ ] Error-to-message map (renders 'on hold' on 429).
+- **Dependencies**: none.
+
+### 4. `lib/auth.ts` + `middleware.ts`
+- [ ] `getSession` / `getCompanyId` / `requireSession` server-side helpers.
+- [ ] jose 5.x JWT verification on every `/board/*` request.
+- [ ] Redirect to `/login` with `?next=` if invalid/expired.
+- [ ] Reads issuer URL and JWKS from WI-008 stack outputs at deploy time.
+- **Dependencies**: Task 3.
+
+### 5. `api/auth/callback/route.ts` + `api/auth/logout/route.ts`
+- [ ] OAuth code+PKCE exchange via `@aws-sdk/client-cognito-identity-provider`.
+- [ ] Set HTTP-only secure cookies (`id_token`, `access_token`, `refresh_token`).
+- [ ] Redirect to the originally-requested URL.
+- [ ] Logout clears cookies and redirects to login.
+- [ ] Vitest route test: happy path + invalid code + state mismatch.
+- **Dependencies**: Task 4.
+
+### 6. `components/jack-card.tsx` + `components/line-state-pill.tsx`
+- [ ] The labeled jack row.
+- [ ] Line-state indicators (unplugged / connecting / live / on hold).
+- [ ] 'Live' is the only Patch Amber on the jack (per Live Line Rule).
+- [ ] Plug animation on publish (motion per ADR-007).
+- [ ] Vitest asserts the line-state label strings.
+- **Dependencies**: Task 2.
+
+### 7. `components/usage-meter.tsx`
+- [ ] Plan + credits visualization.
+- [ ] 80%-alert surface as 'Almost out of credits'.
+- [ ] 100%-block surface as 'On hold' (matches line vocabulary).
+- [ ] Renders 'on hold' on 429 from the API.
+- [ ] Vitest asserts the threshold labels.
+- **Dependencies**: Task 2.
+
+### 8. `components/stepper.tsx`
+- [ ] 4-step indicator.
+- [ ] Current step in Patch Amber.
+- **Dependencies**: Task 2.
+
+### 9. `components/wizard-store.ts` + `lib/use-hydrated.ts`
+- [ ] Zustand store with `persist` middleware.
+- [ ] localStorage key: `chatsaas:draft:<operatorId>:<chatbotId>`.
+- [ ] Actions: `setName`, `addDocument`, `removeDocument`, `goToStep`, `reset`.
+- [ ] `useHydrated` hook: false on first server pass, true on first client pass.
+- [ ] Vitest simulates full reload between every step and asserts draft restoration.
+- [ ] `useHydrated` test asserts the SSR-safe behavior.
+- **Dependencies**: Task 8.
+
+### 10. `components/file-dropzone.tsx`
+- [ ] Drag-and-drop.
+- [ ] XHR upload progress events.
+- [ ] Retry once on transient network failure.
+- [ ] Surfaces the API's structured error in operator language.
+- **Dependencies**: Tasks 3, 9.
+
+### 11. Wizard pages (steps 1–4)
+- [ ] `app/(board)/wizard/layout.tsx` — wizard shell.
+- [ ] `app/(board)/wizard/page.tsx` — step 1 (name).
+- [ ] `app/(board)/wizard/documents/page.tsx` — step 2 (upload + list).
+- [ ] `app/(board)/wizard/review/page.tsx` — step 3 (readiness + plan picker).
+- [ ] `app/(board)/wizard/publish/page.tsx` — step 4 (the patch-cord plug-in moment).
+- [ ] Same vertical space across all 4 steps.
+- [ ] SSR redirect when a step is reached without the previous data.
+- [ ] Publish with 0 ready docs shows confirmation dialog (per DC-007-2).
+- **Dependencies**: Tasks 3..10.
+
+### 12. `app/(board)/page.tsx` — Your lines
+- [ ] Server Component.
+- [ ] Fetches the company's chatbots from `GET /api/chatbots`.
+- [ ] Renders jack cards with line-state indicators.
+- **Dependencies**: Tasks 4, 6, 7.
+
+### 13. `app/(board)/chatbots/[id]/page.tsx` — chatbot detail
+- [ ] Status, document list, meter, publish/unpublish controls, iframe generator.
+- **Dependencies**: Task 12.
+
+### 14. `app/(board)/plan/page.tsx` — plan + credits
+- [ ] Read-only plan view, credits meter, prepayment button (modal placeholder per DC-007-3).
+- **Dependencies**: Task 7.
+
+### 15. `lib/embed.ts` — iframe generator
+- [ ] `IFRAME_SNIPPET_TEMPLATE` constant.
+- [ ] copyToClipboard helper.
+- [ ] Snippet: `sandbox="allow-scripts allow-same-origin"`, `referrerpolicy="strict-origin-when-cross-origin"`, `loading="lazy"`.
+- [ ] Vitest asserts the exact string the operator copies.
+- [ ] SECURITY note in the file: the sandbox does NOT include `allow-top-navigation` or `allow-popups`.
+- **Dependencies**: Task 13.
+
+### 16. Vitest suites
+- [ ] Components: jack-card, line-state-pill, usage-meter, stepper, wizard-store, file-dropzone.
+- [ ] Routes: api/auth/callback (happy + invalid + state mismatch).
+- [ ] Wizard-store persistence: full reload between every step.
+- [ ] Iframe-snippet exact-string test.
+- [ ] CSRF header test for at least one mutation per resource.
+- [ ] kaddo guard custom rule: no `bg-blue-*`, no Spanish copy strings.
+- **Dependencies**: Tasks 1..15.
+
+### 17. Playwright e2e
+- [ ] Happy path: name → upload mock → review → publish → see the jack light up.
+- **Dependencies**: Tasks 1..15.
+
+### 18. Carbonize DESIGN.md
+- [ ] Run `/impeccable document` (scan mode) at build finish.
+- [ ] Real tokens in, placeholder text out.
+- [ ] Generate `.impeccable/design.json` sidecar.
+- **Dependencies**: Tasks 1..17.
+
+## Risks
+- R-1 (CRITICAL) visual drift into the blue SaaS rut: replaced scaffold, kaddo guard enforces.
+- R-2 (HIGH) Cognito callback mishandling: full route test.
+- R-3 (HIGH) wizard draft loss: Zustand persist + useHydrated + full reload test.
+- R-5 (MEDIUM) publish before ingest ready: disabled with override + dialog.
+- R-6 (MEDIUM) iframe security: sandbox + referrerpolicy + exact-string test.
+- R-7 (MEDIUM) CSRF: X-Requested-With header + vitest.
+
+## Validation
+- `pnpm -F web type-check`, `pnpm -F web lint`, `pnpm -F web test` all green.
+- Playwright e2e green.
+- `kaddo guard` 0 findings.
+- `kaddo questions` 0 new blocking.
+- Manual smoke (documented in `apps/web/README.md`): dev server, sign in, create a chatbot, upload a PDF, publish, copy iframe snippet, paste into a blank HTML, ask a question, see the grounded answer.
+- Recommended: 1 Judgment Day round on the wizard happy path + publish security (XSS in iframe, CSRF on publish, draft loss on refresh).

@@ -1,0 +1,70 @@
+{
+  "title": "Redesign the Operator's Board",
+  "question": "The roll dealt three compositions for /board inside the committed world. Lock one — or steer and re-roll.",
+  "options": [
+    {
+      "id": "roll-ledger",
+      "label": "The Ledger Spread",
+      "kicker": "THE ROLL",
+      "lineage": "switchboard position log / operator's daily logbook",
+      "thesis": "Every line is one ledger row — jack, state, usage, action — scanned top to bottom like a position log.",
+      "palette": ["#F8F4E9", "#2D3142", "#B8860B", "#D6D2C4"],
+      "materials": ["ruled ledger lines", "engraved column headers", "mono tabular figures"],
+      "viewport": "Header plus a summary strip (live / on hold / credits), then one ledger row per line with inline plug and unplug, the plug-in CTA closing the page.",
+      "risk": "Reads like a spreadsheet the moment the jack character or the amber ration slips.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · board name", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "summary strip · live / on hold / credits", "x": 0, "y": 1, "w": 12, "h": 1, "accent": true },
+          { "label": "ledger rows · one line each", "x": 0, "y": 2, "w": 12, "h": 6 },
+          { "label": "plug-in CTA row", "x": 0, "y": 8, "w": 12, "h": 1, "accent": true },
+          { "label": "quiet footer", "x": 0, "y": 9, "w": 12, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "deal-cluster",
+      "label": "The Instrument Cluster",
+      "lineage": "machine-room gauge panel",
+      "thesis": "The glance lives up top: gauges for lines live, conversations used, and credits left, with the board beneath.",
+      "palette": ["#F8F4E9", "#2D3142", "#B8860B", "#D6D2C4"],
+      "materials": ["dial faces", "tick scales", "engraved labels"],
+      "viewport": "Three dial-face gauges across the top viewport with the jack rows below; nothing else competes for the first look.",
+      "risk": "Gauges eat the first viewport and push the board below the fold on laptops.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · board name", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "gauge cluster · live / conversations / credits", "x": 0, "y": 1, "w": 12, "h": 3, "accent": true },
+          { "label": "jack rows · the board", "x": 0, "y": 4, "w": 12, "h": 5 },
+          { "label": "plug-in CTA row", "x": 0, "y": 9, "w": 12, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "deal-desk",
+      "label": "The Split Desk",
+      "lineage": "switchboard position with its instrument shelf",
+      "thesis": "Board on the left, a permanent instrument shelf on the right — usage, activity, shortcuts — nothing behind navigation.",
+      "palette": ["#F8F4E9", "#2D3142", "#B8860B", "#D6D2C4"],
+      "materials": ["tonal panel layering", "engraved shelf labels", "mono figures"],
+      "viewport": "Two panes: jack rows left, the shelf right with the usage meter, recent activity, and quick actions always visible.",
+      "risk": "The shelf collapses on narrow screens and the glance becomes a scroll.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · board name", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "jack rows · the board", "x": 0, "y": 1, "w": 8, "h": 9 },
+          { "label": "instrument shelf · usage / activity / actions", "x": 8, "y": 1, "w": 4, "h": 9, "accent": true }
+        ]
+      }
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code", "toggle": false },
+  "steer": true
+}

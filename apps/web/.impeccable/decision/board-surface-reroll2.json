@@ -1,0 +1,70 @@
+{
+  "title": "Redesign the Operator's Board — re-roll 2 (sidebar)",
+  "question": "Every hand now carries your pinned sidebar. Lock the one that organizes it right — or steer and re-roll again.",
+  "options": [
+    {
+      "id": "roll-indexrail",
+      "label": "The Index Rail",
+      "kicker": "THE ROLL",
+      "lineage": "library card index / patch-cord cross-reference frame",
+      "thesis": "The sidebar is the index of lines — name plus state lamp, selectable — and the selected line's full detail is always open beside it: status, usage, embed, actions. Zero navigation.",
+      "palette": ["#F8F4E9", "#2D3142", "#B8860B", "#D6D2C4"],
+      "materials": ["index card rail", "engraved divider labels", "mono tabular figures"],
+      "viewport": "Header, then the rail with every line as an index card and the main pane holding the selected line's detail at full width — board, meter, and embed in one unbroken view.",
+      "risk": "With many lines the rail scrolls and the 'everything at once' feel thins out.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · board name", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "index rail · every line, lamp + name", "x": 0, "y": 1, "w": 3, "h": 9, "accent": true },
+          { "label": "selected line detail · status, meter, embed, actions", "x": 3, "y": 1, "w": 9, "h": 8 },
+          { "label": "plug-in CTA row", "x": 3, "y": 9, "w": 9, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "deal-fleetboard",
+      "label": "The Fleet Board",
+      "lineage": "machine-room meter panel mounted beside the board",
+      "thesis": "The sidebar is the meter panel — plan gauge, credits, limits, and alerts permanently on — and the main area stays pure board: every line, nothing else.",
+      "palette": ["#F8F4E9", "#2D3142", "#B8860B", "#D6D2C4"],
+      "materials": ["dial faces", "engraved bay labels", "tonal panel layering"],
+      "viewport": "Header, then the meter sidebar with the usage position always visible, and the jack rows filling the main pane edge to edge.",
+      "risk": "The sidebar answers 'how am I doing' but not 'what happened recently'.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · board name", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "meter rail · plan, credits, alerts", "x": 0, "y": 1, "w": 3, "h": 9, "accent": true },
+          { "label": "jack rows · the board", "x": 3, "y": 1, "w": 9, "h": 8 },
+          { "label": "plug-in CTA row", "x": 3, "y": 9, "w": 9, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "deal-wizardrail",
+      "label": "The Wizard Rail",
+      "lineage": "job ticket rail on a workshop wall",
+      "thesis": "Creation becomes a permanent instrument: the sidebar carries the create-a-line flow step by step, always one click from the board it feeds.",
+      "palette": ["#F8F4E9", "#2D3142", "#B8860B", "#D6D2C4"],
+      "materials": ["ticket stubs", "engraved step plates", "cord waypoints"],
+      "viewport": "Header, then the create rail with the four steps stacked and the board beside it — starting a new line never leaves the view.",
+      "risk": "It rebuilds the creation flow you said you already like — locking it changes the wizard.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · board name", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "wizard rail · steps 1-4 always live", "x": 0, "y": 1, "w": 4, "h": 9, "accent": true },
+          { "label": "jack rows · the board", "x": 4, "y": 1, "w": 8, "h": 8 },
+          { "label": "quiet footer", "x": 4, "y": 9, "w": 8, "h": 1 }
+        ]
+      }
+    }
+  ],
+  "reroll": true,
+  "buildPath": { "value": "code", "toggle": false },
+  "steer": true
+}

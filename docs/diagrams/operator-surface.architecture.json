@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "chatSaaS — Operator Surface (Auth + Board API)",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "docs/diagrams/operator-surface.html"
+  },
+  "components": [
+    { "id": "operator_browser", "type": "external", "label": "Operator Browser", "sublabel": "company admin", "pos": [40, 200], "size": [128, 62] },
+    { "id": "web_bff", "type": "frontend", "label": "Next.js Web App", "sublabel": "board + BFF proxy", "pos": [300, 200], "size": [150, 70] },
+    { "id": "api_lambda", "type": "backend", "label": "API Lambda (Fastify)", "sublabel": "operator API", "pos": [620, 200], "size": [170, 78] },
+    { "id": "s3", "type": "cloud", "label": "S3 Documents Bucket", "sublabel": "source documents", "pos": [950, 200], "size": [150, 66] },
+    { "id": "cognito", "type": "security", "label": "Amazon Cognito", "sublabel": "User Pool · JWT issuer", "pos": [300, 440], "size": [150, 66] },
+    { "id": "dynamodb", "type": "database", "label": "DynamoDB", "sublabel": "companies · documents · credits", "pos": [620, 440], "size": [150, 66] }
+  ],
+  "connections": [
+    { "from": "operator_browser", "to": "web_bff", "label": "HTTPS board session", "variant": "emphasis" },
+    { "from": "web_bff", "to": "api_lambda", "label": "same-origin proxy · Bearer", "variant": "emphasis" },
+    { "from": "api_lambda", "to": "s3", "label": "presigned upload URL" },
+    { "from": "web_bff", "to": "cognito", "label": "OIDC auth code flow", "labelAt": [325, 350] },
+    { "from": "api_lambda", "to": "cognito", "label": "verify operator JWT", "variant": "dashed" },
+    { "from": "api_lambda", "to": "dynamodb", "label": "chatbots · documents · credits", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Auth Flow",
+      "items": [
+        "The board never holds AWS credentials: the BFF proxy attaches the operator Bearer token",
+        "Cognito issues the JWT; the API verifies it on every operator route",
+        "Cognito triggers (pre-token, post-confirmation) auto-provision the company record"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Operator Writes",
+      "items": [
+        "Chatbots, documents, plans, and credits are operator CRUD over DynamoDB",
+        "Document upload returns a presigned S3 URL; the browser uploads directly",
+        "The upload event continues in the Async Document Ingest diagram"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Deployment Note",
+      "items": [
+        "AWS components live in us-east-1 in the chatSaaS account (ADR-006 shared tenancy)",
+        "The Next.js app is the operator surface; Neon is an external SaaS (see ingest diagram)"
+      ]
+    }
+  ]
+}

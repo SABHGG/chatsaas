@@ -25,9 +25,9 @@ Phase: Active Delivery
 Reason:
 
 - Roadmap available
-- 1 materialized work item(s)
-- ready: 1
-- Ownership coverage 0%
+- 3 materialized work item(s)
+- ready: 2
+- Ownership coverage 67%
 
 Recommended next: implementation-agent, kaddo owners suggest
 
@@ -37,9 +37,9 @@ Next step: Run `kaddo add skills` to install reusable Kaddo skills.
 
 - Phase: Setup
 - Draft Work Items: 0
-- Ready Work Items: 1
+- Ready Work Items: 2
 - In-progress Work Items: 0
-- Ownership coverage: 0/1
+- Ownership coverage: 2/3
 - Remaining Work Item candidates: 0
 
 ## Next Step Recommendation
@@ -51,11 +51,10 @@ Next step: Run `kaddo add skills` to install reusable Kaddo skills.
 
 ## Project Route
 
-Route: new · Progress: 8/12
+Route: new · Progress: 9/12
 
-Current:
-
-- Prepare implementation — implementation-agent
+Warnings:
+- Create initial work source — Some Work Items have no source metadata.
 
 ## Knowledge Layers
 
@@ -64,16 +63,13 @@ Project knowledge is organized in four layers: **Business → Product → Tech �
 Knowledge maturity — Business: Consolidated · Product: Structured · Tech: Structured · Delivery: Traceable
 
 ### Business — Consolidated
-
 - ✓ business.md
 
 ### Product — Structured
-
 - ✓ capabilities.md
 - ✓ product.md
 
 ### Tech — Structured
-
 - ✓ 001-use-cognito-for-authentication.md
 - ✓ 002-use-pnpm-as-package-manager.md
 - ✓ 003-technology-stack-selection.md
@@ -91,9 +87,11 @@ Knowledge maturity — Business: Consolidated · Product: Structured · Tech: St
 - ✓ quality-attributes.md
 
 ### Delivery — Traceable
-
 - ✓ WI-001-define-public-chatbot-creation-and-publishing.md
 - ✓ WI-002-define-backend-endpoints.md
+- ✓ WI-002b-fix-typescript-types-wi-002.md
+- ✓ WI-003-server-bootstrap-with-cognito-jwt-verifier.md
+- ✓ WI-004-cdk-app-bootstrap-with-aurora-pgvector.md
 - ✓ roadmap.md
 
 ## Technical Inventory
@@ -117,7 +115,7 @@ Knowledge maturity — Business: Consolidated · Product: Structured · Tech: St
 
 - Initiatives: 1
 - Work Item candidates: 1
-- Materialized Work Items: 1
+- Materialized Work Items: 3
 - Remaining Work Item candidates: 0
 
 Initiatives and Work Items below are candidates for human review, not implementation commitments.
@@ -125,7 +123,6 @@ Initiatives and Work Items below are candidates for human review, not implementa
 ## Roadmap Quality
 
 Initiatives:
-
 - Candidates evaluated: 1
 - Grounded: 1/1
 - With related domain: 1/1
@@ -133,7 +130,6 @@ Initiatives:
 - With source signals: 1/1
 
 Work Item Candidates:
-
 - Candidates: 1
 - With source initiative: 1/1
 - With related domain: 0/1
@@ -143,16 +139,18 @@ Work Item Candidates:
 
 - WI-001 [feature] [K2] (ready) — Define public chatbot creation and publishing · domains: Public Chatbot Delivery
   - Source: roadmap · WI-CANDIDATE-001
+- WI-004 [feature] [K2] (ready) — CDK app bootstrap with Aurora Serverless v2 + pgvector + RDS Proxy
 
 ## Delivery Mix
 
 Active Work Items by type:
 
-- Features: 1
+- Features: 2
 
 ## Artifacts and Ownership
 
-No artifacts declare code ownership yet.
+- WI-003 [feature] owns: apps/functions/src/server.ts, apps/functions/src/auth/verifyCognitoJwt.ts, apps/functions/src/auth/claims.ts, apps/functions/src/auth/__tests__/verifyCognitoJwt.test.ts, apps/functions/src/api/__tests__/server.integration.test.ts
+- WI-004 [feature] owns: infra/app.ts, infra/lib/chat-saas-stack.ts, infra/lib/aurora-pgvector.ts, infra/lib/rds-proxy.ts, infra/lib/embeddings-table-resource.ts, infra/test/chat-saas-stack.test.ts, infra/cdk.json, infra/package.json
 
 ## Missing Context
 

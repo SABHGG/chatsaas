@@ -9,6 +9,10 @@
   },
   "scripts": {
     "dev": "pnpm --filter web dev",
+    "dev:api": "pnpm --filter @chatsaas/functions dev:sandbox",
+    "dev:ingest": "pnpm --filter @chatsaas/functions exec tsx scripts/sandbox-ingest-bot.mjs",
+    "dev:ingest-doc": "pnpm --filter @chatsaas/functions exec tsx scripts/sandbox-ingest.mjs",
+    "dev:sandbox": "pnpm --filter @chatsaas/web exec sh -c 'set -a; . ./.env.local; set +a; next dev -p 3000'",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",

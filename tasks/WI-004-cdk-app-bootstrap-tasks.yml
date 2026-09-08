@@ -1,0 +1,80 @@
+# WI-004 CDK App Bootstrap Tasks
+
+## Change
+- **Name**: WI-004-cdk-app-bootstrap-with-neon-pgvector
+- **Based on**: ADR-008 (2026-09-05) — Neon replaces Aurora as the vector store
+- **Artifact store**: Kaddo
+- **Branch**: feature/WI-004-neon-vector-store
+- **Tests**: vitest + aws-cdk-lib/assertions + manual smoke against a real Neon dev project
+
+## Tasks (implementation order)
+
+### 1. Neon project + SSM parameter
+- [x] Create a Neon project (region us-east-1, `main` branch) for the dev environment.
+- [x] Copy the pooled connection string (hostname includes `-pooler`) from the Neon console.
+- [ ] Store it in SSM Parameter Store as a SecureString named `chatsaas-{env}-neon-url` (free; replaces the Secrets Manager credential path).
+  - Note: pending-manual — no AWS credentials in this environment; the exact `aws ssm put-parameter` command is documented in infra/README.md.
+- [x] Record the Neon project id, region, and branch in `infra/README.md`.
+  - Note: region + branch recorded; the Neon project id is a TODO placeholder (no console/API access from this environment).
+- **Dependencies**: none.
+
+### 2. pgvector migration script + runbook
+- [x] Create `infra/db/migrations/001-embeddings-pgvector.sql` porting the SQL from `infra/lib/embeddings-table-resource.ts` (`EMBEDDINGS_TABLE_SQL`) and `infra/lib/ingest-embeddings-index.ts` (`EMBEDDINGS_UNIQUE_INDEX_SQL`): `CREATE EXTENSION IF NOT EXISTS vector`, the `public.embeddings` table, the HNSW index on `embedding vector_cosine_ops`, the composite `(chatbot_id, company_id)` index, the `content_sha256` column, and the unique `(chatbot_id, content_sha256)` index + `ANALYZE`.
+- [x] Every statement idempotent (`IF NOT EXISTS`).
+- [x] Document the runbook step (how to run the migration against the Neon `main` branch) in `infra/README.md`.
+- **Dependencies**: Task 1.
+
+### 3. Delete Aurora-era constructs + stack wiring cleanup
+- [x] Delete `infra/lib/aurora-pgvector.ts`, `infra/lib/rds-proxy.ts`, `infra/lib/database-secret.ts`, `infra/lib/security-groups.ts`, `infra/lib/vpc.ts`, `infra/lib/embeddings-table-resource.ts`, `infra/lib/ingest-embeddings-index.ts`.
+- [x] Remove all wiring from `infra/lib/chat-saas-stack.ts`: cluster, proxy, secret rotation, security groups, VPC, custom resources, and their outputs.
+- [x] Remove now-unused RDS-era dependencies from `infra/package.json` (`@aws-sdk/client-rds-data`, etc.).
+- **Dependencies**: none.
+
+### 4. Ingest Lambda de-VPC + SSM grant + driver swap
+- [x] In `infra/lib/ingest-lambda.ts`: remove `vpc` / `vpcSubnets` / `securityGroups` props — the Lambda is non-VPC; all AWS service calls use public endpoints.
+- [x] Replace the `rds-data:ExecuteStatement` IAM statement with least-privilege `ssm:GetParameter` on the `chatsaas-{env}-neon-url` parameter.
+- [x] Swap the handler DB calls to `@neondatabase/serverless` (fetch-based HTTP driver preferred) over the pooled endpoint; preserve the `INSERT ... ON CONFLICT (chatbot_id, content_sha256) DO NOTHING` semantics.
+- [x] Add `@neondatabase/serverless` to the Lambda bundle and verify the esbuild config handles it (fetch-based ESM, no native deps).
+  - Note: bundling uses `externalModules: []` — the Node 20 runtime SDK subset omits `@aws-sdk/client-ssm`, so everything (driver + client-ssm) is bundled; bundle verified via cdk.out inspection.
+- **Dependencies**: Task 1, Task 3.
+
+### 5. Stack outputs update
+- [x] Remove ClusterEndpoint / ProxyArn / SecretArn outputs.
+- [x] Add `NeonUrlParameterName` output (SSM parameter name).
+- **Dependencies**: Task 3, Task 4.
+
+### 6. Vitest suite update
+- [x] Update `infra/test/`: remove all `DBCluster` / `DBProxy` / VPC / Secrets Manager assertions and the tests of the deleted constructs.
+- [x] Assert the ingest Lambda config has NO `vpc` / `securityGroups`.
+- [x] Assert the ingest Lambda policy contains `ssm:GetParameter` scoped to the Neon URL parameter.
+- [x] Keep bucket / EventBridge / documents-table assertions green.
+- **Dependencies**: Tasks 3–5.
+
+### 7. Synth validation
+- [x] `cdk synth` produces a template with NO `AWS::RDS::*` and NO VPC/EC2 data-plane resources.
+- [x] `pnpm -F infra test` is green (19 tests).
+- [x] `pnpm type-check` at the root is 0 errors.
+  - Note: all real packages pass (infra, apps/functions, apps/web); `packages/types` and `packages/core` fail pre-existing (scaffolding with no tsconfig.json, unchanged since the initial monorepo commit — out of WI scope).
+- **Dependencies**: Task 6.
+
+### 8. Validation smoke against real Neon + commit
+- [x] Run the migration script against the Neon dev project (`main` branch): pgvector extension + embeddings table + HNSW index + unique index all applied.
+- [ ] Ingest smoke test: upload a fixture document and verify embeddings rows land in Neon end-to-end (floci cannot emulate Neon — requires a real Neon free project).
+  - Note: DB-layer smoke done against the real dev project via `scripts/smoke-neon-persist.mts` (the real `persistChunks` data plane: insert, ON CONFLICT no-op re-insert, count, cleanup). Full fixture end-to-end is pending an environment with Docker/floci (unavailable in this WSL distro).
+- [x] Commit on `feature/WI-004-neon-vector-store` with message `feat(WI-004): swap Aurora for Neon as vector store`.
+- **Dependencies**: All previous tasks.
+
+## Dependencies
+
+- `@neondatabase/serverless` (Neon serverless driver for the ingest Lambda)
+- `aws-cdk-lib` + `constructs` (existing)
+- `@aws-sdk/client-ssm` — SSM read from the ingest Lambda (NOT in the Node 20 runtime SDK subset; bundled via `externalModules: []`)
+- `vitest` + `aws-cdk-lib/assertions` (existing)
+
+## Out of Scope
+
+- Retrieval-path code changes (WI-006 completed record notes the supersession).
+- Cognito User Pool provisioning.
+- Bedrock Knowledge Base wiring (WI-005).
+- Production Neon project, branching strategy for staging, multi-region.
+- Rotation Lambda implementation (the concept is deleted along with Secrets Manager).

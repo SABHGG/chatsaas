@@ -33,13 +33,21 @@ export interface CognitoAccessTokenClaims {
  * The request.user shape populated by the verifyCognitoJwt hook. Other
  * handlers read `request.user.sub` (and, later, `request.user.companyId`).
  *
- * SECURITY NOTE — `companyId` MUST NOT be used as the sole basis for
- * tenant authorization. The `custom:company_id` attribute is a
- * user-pool attribute that any end user in the pool can self-service
- * (via the standard Cognito attribute-update flow). It is surfaced here
- * for UX display only. Tenant-scoped authorization must be derived from
- * `sub` against a server-controlled mapping table (DynamoDB / Cognito
- * Group membership) in a follow-up WI.
+ * SECURITY NOTE (revised for WI-005) — `custom:company_id` IS the tenant
+ * authorization source for write paths. The chain of custody is:
+ *   (1) the WI-008 post-confirmation Lambda is the sole writer of the
+ *       immutable `custom:company_id` attribute,
+ *   (2) the SignUp form and the UserPoolClient `writeAttributes` whitelist
+ *       exclude the attribute (AC-13), and
+ *   (3) no other IAM principal in the stack has
+ *       `cognito-idp:AdminUpdateUserAttributes` on the User Pool (AC-14).
+ * `resolveTenant` reads the claim and treats it as the authoritative
+ * `companyId`. **The `company_id/` and `chatbot_id/` S3 key prefix in the
+ * upload path is a hint, not authority**; the IngestLambda re-resolves
+ * ownership from the Document row before any Bedrock or Aurora call.
+ * Body or query field overrides of `companyId` or `chatbotId` MUST be
+ * ignored — `resolveTenant`'s unit test asserts this and is a release
+ * blocker.
  */
 export interface AuthenticatedUser {
   sub: string

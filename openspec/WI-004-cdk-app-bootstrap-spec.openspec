@@ -1,0 +1,117 @@
+# WI-004 CDK App Bootstrap Specification
+
+## Change
+- **Name**: WI-004-cdk-app-bootstrap
+- **Intent**: Land a runnable AWS CDK app that synthesizes the Aurora Serverless v2 + pgvector + RDS Proxy + Secrets Manager foundation for the chatSaaS RAG layer
+- **Scope**: new `infra/` TypeScript CDK app under the existing pnpm workspace (dev stack only; prod is a follow-up)
+- **Source**: knowledge/delivery/work-items/ready/WI-004-cdk-app-bootstrap-with-aurora-pgvector.md
+- **Source ADR**: knowledge/tech/decisions/004-aws-service-selection-for-ai-capabilities.md
+- **Branch**: feature/WI-004-cdk-app-bootstrap (derived from feature/post-wi-003-rag-infra@806da49)
+- **Artifact store**: Kaddo
+- **Tests**: vitest + aws-cdk-lib/assertions
+
+## Requirements
+
+### 1. Workspace structure
+- New `infra/` package added to the pnpm workspace.
+- `infra/package.json` declares runtime deps: `aws-cdk-lib@^2.266.0`, `constructs@^10.0.0`, `@aws-sdk/client-rds-data@^3.1116.0`.
+- `infra/package.json` declares dev deps: `vitest@^4.1.11`, `ts-node`, `@types/node`, `aws-cdk-lib/assertions`.
+- `infra/tsconfig.json` extends the root, `target: ES2022`, `module: ESNext`, `moduleResolution: bundler`, `strict: true`.
+- `infra/cdk.json` with `app: "npx ts-node --prefer-ts-exts app.ts"`.
+- `infra/.gitignore` for `cdk.out/`, `node_modules/`, `*.d.ts`, `*.js` (except `*.config.js`).
+- `infra/README.md` with prerequisites (Node 24, pnpm 11, CDK CLI, AWS account, Bedrock-enabled region) and the deploy command.
+
+### 2. Stack composition
+- `infra/app.ts` loads dev account/region from context and instantiates `ChatSaaSStack`.
+- `infra/lib/chat-saas-stack.ts` composes Aurora, RDS Proxy, Secrets, the custom resource, and the rotation hook.
+- `infra/lib/vpc.ts` accepts the default VPC and references its private subnets.
+- Stack emits: cluster endpoint, proxy endpoint, secret ARN, database name.
+
+### 3. Aurora Serverless v2 cluster
+- Engine: `aurora-postgresql`, version `16.4` (verify the latest 16.x at merge time).
+- Serverless v2: 0.5 ACU min, 4 ACU max, `autoPause` off for MVP.
+- Parameter group: `shared_preload_libraries = 'vector'`.
+- Database: name `chatsaas`, single writer.
+- Credentials: `rds.Credentials.fromGeneratedSecret('chatsaas-db')` with exclusion of uppercase/lowercase requirements.
+- Enable `pgvector` via a custom resource (Requirement 6).
+
+### 4. Secrets Manager + 7-day rotation
+- Use the generated secret from Requirement 3; add explicit `RotationRules: { automaticallyAfter: Duration.days(7) }`.
+- Rotation Lambda in `infra/lib/rotation-lambda.ts` with the correct handler signature (`SecretsManagerRotationHandler`) and a no-op `rotate` function. A follow-up WI implements the actual rotation logic.
+- Wire the rotation Lambda to the secret via `addRotationLambda`.
+
+### 5. RDS Proxy
+- IAM auth: on.
+- Target group: cluster writer.
+- Secret: references the same secret as the cluster.
+- Security group: only the Lambda SG can reach the proxy on 5432.
+- Vpc subnets: private subnets of the default VPC.
+
+### 6. Custom resource: `public.embeddings` + HNSW
+- `infra/lib/embeddings-table-resource.ts` Lambda.
+- SQL: `CREATE EXTENSION IF NOT EXISTS vector;` then `CREATE TABLE IF NOT EXISTS public.embeddings (...)` with columns: `id UUID PK`, `chatbot_id UUID NOT NULL`, `company_id UUID NOT NULL`, `content TEXT NOT NULL`, `embedding vector(1024) NOT NULL`, `created_at TIMESTAMPTZ NOT NULL DEFAULT now()`. Then `CREATE INDEX IF NOT EXISTS ... USING hnsw (embedding vector_cosine_ops);` and `CREATE INDEX IF NOT EXISTS ... (chatbot_id, company_id);`.
+- Idempotent: re-running is a no-op.
+- Uses RDS Data API to run the SQL; assumes the cluster is reachable.
+
+### 7. Vitest assertions
+- `AWS::RDS::DBCluster` with `Engine: aurora-postgresql` and `EngineVersion` matching `16.x`.
+- `AWS::RDS::DBClusterParameterGroup` with `shared_preload_libraries` parameter value containing `vector`.
+- Custom resource Lambda function whose inline code contains the literal strings: `CREATE EXTENSION IF NOT EXISTS vector;`, `CREATE INDEX`, `hnsw`, `vector_cosine_ops`, and the expected column names.
+- `AWS::RDS::DBProxy` in the template.
+- `AWS::SecretsManager::Secret` with `RotationRules.AutomaticallyAfterDays` = `7`.
+- Stack outputs: cluster endpoint, proxy endpoint, secret ARN, database name.
+
+## Scenarios
+
+### Developer first deploy (dev account)
+1. Developer runs `cdk bootstrap` on the dev account.
+2. Developer sets `CDK_DEFAULT_ACCOUNT` and `CDK_DEFAULT_REGION` env vars.
+3. `cd infra && pnpm synth` produces `cdk.out/ChatSaaSStack.template.json`.
+4. `pnpm -F infra test` runs the assertions, all green.
+5. `cdk deploy` creates the cluster, the custom resource Lambda runs the SQL, the proxy is bound, the secret is rotated by a no-op Lambda.
+6. After deploy, developer can `psql` through the proxy to `SELECT * FROM public.embeddings;` and see the empty table.
+
+### Re-deploy (no drift)
+1. Developer re-runs `cdk deploy`.
+2. The custom resource Lambda runs again; the SQL contains `IF NOT EXISTS` everywhere, so the second run is a no-op.
+3. No resources are replaced or failed.
+
+### Future Bedrock Knowledge Base wiring (out of scope here)
+- The embeddings table, the HNSW index, and the composite index on `(chatbot_id, company_id)` are the foundation. WI-005 (ingest pipeline) writes into this table; WI-006 (retrieval) reads from it.
+
+## Out of scope
+- Cognito User Pool provisioning (WI-008).
+- Bedrock Knowledge Base wiring (WI-005 / WI-006).
+- Ingest pipeline / parsers (WI-005).
+- API Gateway HTTP API wiring (already in WI-003's server bootstrap).
+- Production stack, multi-region, cross-account replicas.
+- Rotation Lambda implementation.
+- Local dev without a real Aurora cluster.
+
+## Risks
+- **Aurora minimum cost**: 0.5 ACU floor. Acceptable for dev.
+- **Region without Bedrock**: README warns; stack parameterizes the region.
+- **RDS Proxy cold start**: 100–300ms first invocation; acceptable for MVP.
+- **pgvector ≤ 2000 dims**: locked at 1024 in the column; future migrations need an offline rewrite.
+- **Custom resource drift**: SQL is `IF NOT EXISTS`; CDK does not detect drift. A manual `psql` smoke test is documented in `infra/README.md`.
+
+## Validation
+- `pnpm install` at the root resolves the new workspace.
+- `pnpm -F infra synth` is clean.
+- `pnpm -F infra test` is green.
+- `pnpm type-check` at the root is clean.
+- `pnpm lint` at the root has 0 errors on `infra/`.
+- `kaddo guard` returns 0 findings.
+- `kaddo questions` returns 0 new blocking.
+
+## Cross-references
+- `knowledge/delivery/work-items/ready/WI-004-cdk-app-bootstrap-with-aurora-pgvector.md`
+- `knowledge/tech/decisions/004-aws-service-selection-for-ai-capabilities.md` (ADR-004)
+- `tasks/WI-004-cdk-app-bootstrap-tasks.yml` (canonical task list)
+- `knowledge/tech/discovery/decision-candidates.md` (Q1/Q2/Q3 closed)
+
+## Next WIs
+- WI-008 (chain of custody for `custom:company_id`) — must land before WI-005.
+- WI-005 (ingest pipeline) — writes into `public.embeddings`.
+- WI-006 (retrieval + chat) — reads from `public.embeddings`.
+- WI-007 (frontend Operator's Board).

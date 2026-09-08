@@ -1,0 +1,72 @@
+{
+  "title": "Redesign the Operator's Board — re-roll 1 (bolder)",
+  "question": "Fresh hand, foreign forms at full commitment, same committed world. Lock one — or steer and re-roll again.",
+  "options": [
+    {
+      "id": "roll-patchbay",
+      "label": "The Patch-Bay Wall",
+      "kicker": "THE ROLL",
+      "lineage": "telephone switchboard patch bay, played straight as the whole page",
+      "thesis": "The page IS the patch bay: one jack per line on a full-width panel, published lines patched to the company bus with lit amber cords, drafts as empty jacks waiting for a cord.",
+      "palette": ["#F8F4E9", "#2D3142", "#B8860B", "#D6D2C4"],
+      "materials": ["wax patch cords", "brass jack rings", "engraved panel labels"],
+      "viewport": "Header, then the full jack panel — every line visible as a jack with its state — the bus rail and meter bridge carrying usage across the bottom, and the plug-in cord waiting in its cradle.",
+      "risk": "Novelty eats operability if publishing, reading usage, or unplugging takes more than one obvious click.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · board name", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "jack panel · one jack per line, cords to the bus", "x": 0, "y": 1, "w": 12, "h": 6, "accent": true },
+          { "label": "company bus rail", "x": 0, "y": 7, "w": 12, "h": 1 },
+          { "label": "meter bridge · usage at a glance", "x": 0, "y": 8, "w": 12, "h": 1 },
+          { "label": "plug-in cord cradle · the CTA", "x": 0, "y": 9, "w": 12, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "deal-console",
+      "label": "The Control-Room Console",
+      "lineage": "machine-room master control with its lamp mast",
+      "thesis": "One lamp per line in a mast strip across the top — the whole fleet read in a single horizontal scan — and a scope panel for the selected line below.",
+      "palette": ["#F8F4E9", "#2D3142", "#B8860B", "#D6D2C4"],
+      "materials": ["panel lamps", "engraved switchgear", "scope trace on ivory"],
+      "viewport": "Lamp mast strip under the header, then the selected line's scope panel with its usage, documents, and embed, switchgear actions in a fixed column.",
+      "risk": "The mast reads beautifully at five lines and needs grouping before twenty.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · board name", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "lamp mast · one lamp per line", "x": 0, "y": 1, "w": 12, "h": 1, "accent": true },
+          { "label": "scope panel · selected line detail", "x": 0, "y": 2, "w": 9, "h": 7 },
+          { "label": "switchgear column · actions", "x": 9, "y": 2, "w": 3, "h": 7 },
+          { "label": "plug-in CTA row", "x": 0, "y": 9, "w": 12, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "deal-tapedesk",
+      "label": "The Tape Desk",
+      "lineage": "trading-floor ticker tape",
+      "thesis": "The board as an append-only tape: every event a line stamped in time order — plugged, unplugged, conversation completed, credit alert — the newest at the top.",
+      "palette": ["#F8F4E9", "#2D3142", "#B8860B", "#D6D2C4"],
+      "materials": ["tape paper", "rubber state stamps", "mono timestamps"],
+      "viewport": "Header, then one continuous tape: event rows with mono timestamps and state stamps, the live lines' current state held in a fixed side margin.",
+      "risk": "A temporal log buries the fleet's current state when the day is quiet and nothing moves.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "header · board name", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "live-state margin · current fleet", "x": 0, "y": 1, "w": 3, "h": 8, "accent": true },
+          { "label": "tape · event rows, newest first", "x": 3, "y": 1, "w": 9, "h": 8 },
+          { "label": "plug-in CTA row", "x": 0, "y": 9, "w": 12, "h": 1 }
+        ]
+      }
+    }
+  ],
+  "reroll": true,
+  "buildPath": { "value": "code", "toggle": false },
+  "steer": true
+}

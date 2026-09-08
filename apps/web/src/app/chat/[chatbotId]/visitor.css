@@ -1,0 +1,429 @@
+/*
+ * The visitor chat world — "Ask-First Q&A Board" (WI-009, seed fb7dfcd1).
+ *
+ * This surface is deliberately NOT the operator's Flight-Strip board: the
+ * visitor sees it inside the company's own website or as a shared link.
+ * Its world is quiet and neutral on purpose — white ground, ink text,
+ * hairline dividers, one restrained accent that is the ink itself (the
+ * primary button and underlined links), generous readable type, flat
+ * materials. No rack metal, no stamps, no mono instruments, no gradients,
+ * no dark surfaces. At most one soft lift shadow (the composer).
+ *
+ * Everything is scoped under `.vchat` so the operator's token world in
+ * globals.css is never touched and never leaks in here.
+ */
+
+.vchat {
+  --v-ground: #ffffff;
+  --v-ink: #1c1e21; /* near-black, not pure black */
+  --v-ink-soft: #575b60; /* 6.9:1 on white — secondary text */
+  --v-hairline: #e7e7e4;
+  --v-focus: #1c1e21;
+  --v-card-radius: 16px;
+
+  min-height: 100dvh; /* fills the viewport — full page AND the 480px iframe */
+  display: flex;
+  flex-direction: column;
+  background: var(--v-ground);
+  color: var(--v-ink);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Browser surfaces carry the world: ink caret, ink selection, themed
+   scrollbar. scrollbar-color styles an element's OWN scroller — the page's
+   scroller is the root, so the declaration lives on html, scoped to pages
+   that contain .vchat (:has) so it can never leak into operator surfaces.
+   Values mirror --v-ink-soft / --v-hairline (root selectors can't see the
+   .vchat-scoped custom properties). */
+html:has(.vchat) {
+  scrollbar-color: #575b60 #e7e7e4;
+  scrollbar-width: thin;
+}
+
+.vchat {
+  caret-color: var(--v-ink);
+  overscroll-behavior: none;
+  scrollbar-color: var(--v-ink-soft) var(--v-hairline);
+  scrollbar-width: thin;
+}
+
+.vchat ::selection {
+  background: var(--v-ink);
+  color: var(--v-ground);
+}
+
+.vchat :focus-visible {
+  outline: 2px solid var(--v-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Document top: the assistant's name is the document title. */
+.vchat-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+}
+
+.vchat-header {
+  padding: 1.5rem 1.25rem 1rem;
+  max-width: 44rem;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.vchat-name {
+  margin: 0;
+  font-size: 1.375rem;
+  line-height: 1.25;
+  font-weight: 650;
+  letter-spacing: -0.022em;
+  overflow-wrap: anywhere;
+}
+
+.vchat-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--v-ink-soft);
+}
+
+/* The composer leads — front and center, the one lifted surface. */
+.vchat-composer {
+  max-width: 44rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+.vchat-composer form {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.625rem;
+  padding: 0.625rem 0.625rem 0.625rem 1rem;
+  border: 1px solid var(--v-hairline);
+  border-radius: var(--v-card-radius);
+  background: var(--v-ground);
+  /* The ONE soft lift shadow on the surface — offset + blur, not a halo. */
+  box-shadow:
+    0 1px 2px rgb(28 30 33 / 0.06),
+    0 10px 28px rgb(28 30 33 / 0.07);
+}
+
+.vchat-composer:focus-within {
+  border-color: var(--v-ink-soft);
+}
+
+.vchat-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 0.5rem 0;
+  background: transparent;
+  color: var(--v-ink);
+  font: inherit;
+  line-height: 1.5;
+  resize: none;
+}
+
+.vchat-input::placeholder {
+  color: var(--v-ink-soft); /* ≥4.5:1 on white */
+  opacity: 1;
+}
+
+.vchat-input:focus {
+  outline: none; /* the focus ring lives on the composer frame */
+}
+
+.vchat-input:disabled {
+  color: var(--v-ink-soft);
+  cursor: default;
+}
+
+.vchat-send {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 0;
+  border-radius: 999px; /* a small control may be a pill */
+  padding: 0.5rem 1.125rem;
+  background: var(--v-ink);
+  color: #ffffff;
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease-out;
+}
+
+.vchat-send:hover:not(:disabled) {
+  background: #33373c;
+}
+
+.vchat-send:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* The answered stack: dealt as documents, separated by hairlines. */
+.vchat-board {
+  flex: 1;
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0.25rem 1.25rem 2.5rem;
+}
+
+.vchat-greeting {
+  margin: 1rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--v-ink-soft);
+}
+
+.vchat-list {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.vchat-item {
+  border-top: 1px solid var(--v-hairline);
+  padding: 1.25rem 0 1.5rem;
+}
+
+.vchat-item:first-child {
+  border-top: 0; /* the greeting/composer already open the page */
+  padding-top: 1rem;
+}
+
+/* More space above the question than below it. */
+.vchat-question {
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.vchat-answer {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  max-width: 68ch;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+/* Sources: footnotes at the card foot, collapsed by default, inert. */
+.vchat-sources {
+  margin-top: 0.875rem;
+}
+
+.vchat-sources summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--v-ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  border-radius: 4px;
+  list-style: none; /* the chevron below carries the state */
+}
+
+.vchat-sources summary::-webkit-details-marker {
+  display: none;
+}
+
+.vchat-sources summary:hover {
+  color: var(--v-ink);
+}
+
+.vchat-sources[open] summary .vchat-chevron {
+  transform: rotate(180deg);
+}
+
+.vchat-chevron {
+  transition: transform 160ms ease-out;
+}
+
+.vchat-source-list {
+  margin: 0.625rem 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 68ch;
+}
+
+.vchat-source-list li {
+  padding: 0.5rem 0 0.5rem 0.875rem;
+  border-left: 1px solid var(--v-hairline); /* hairline, 1px — not a colored slab */
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--v-ink-soft);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.vchat-source-list li + li {
+  margin-top: 0.25rem;
+}
+
+/* Honest failure, calm and blame-free, at the card where it happened. */
+.vchat-error {
+  margin: 0.5rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--v-ink);
+}
+
+.vchat-retry {
+  margin-top: 0.625rem;
+  border: 1px solid var(--v-ink);
+  border-radius: 999px;
+  padding: 0.375rem 1rem;
+  background: transparent;
+  color: var(--v-ink);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+
+.vchat-retry:hover:not(:disabled) {
+  background: var(--v-ink);
+  color: #ffffff;
+}
+
+.vchat-retry:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Thinking: a quiet triple-dot breath + the word itself for readers. */
+.vchat-thinking {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--v-ink-soft);
+}
+
+.vchat-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.vchat-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--v-ink-soft);
+  animation: v-dot-breathe 1.2s ease-in-out infinite;
+}
+
+.vchat-dot:nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.vchat-dot:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+@keyframes v-dot-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* The one authored moment: the answer's reveal — a short rise from an
+   already-readable state, no bounce, no scattered entrances. */
+.vchat-reveal {
+  animation: v-reveal 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes v-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The one moment, and the dots, go still for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .vchat-dot,
+  .vchat-reveal {
+    animation: none;
+  }
+
+  .vchat-chevron,
+  .vchat-send,
+  .vchat-retry {
+    transition: none;
+  }
+}
+
+/* The neutral "not available" state — same quiet document, honestly blank. */
+.vchat-unavailable {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem 1.25rem;
+}
+
+.vchat-unavailable-inner {
+  max-width: 26rem;
+}
+
+.vchat-unavailable h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+  line-height: 1.4;
+  font-weight: 600;
+}
+
+.vchat-unavailable p {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--v-ink-soft);
+}
+
+/* Small screens first: tighten the header, keep every target tappable. */
+@media (max-width: 22.5rem) {
+  .vchat-header,
+  .vchat-composer,
+  .vchat-board {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* Comfortable reading on larger viewports: a touch more air up top. */
+@media (min-width: 48rem) {
+  .vchat-header {
+    padding-top: 3rem;
+  }
+
+  .vchat-composer {
+    padding-top: 0.5rem;
+  }
+}

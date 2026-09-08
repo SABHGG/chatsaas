@@ -11,6 +11,10 @@ build/
 /.pnpm
 .pnpm-store/
 
+# Playwright (WI-007 Task 17)
+test-results/
+playwright-report/
+
 # Environment variables
 .env
 .env*.local
@@ -56,3 +60,13 @@ swagger-docs.json
 
 # Next.js auto-generated (in any subdirectory)
 next-env.d.ts
+# Local Pi runtime state
+.atl/
+
+# Local tool/skill installs (per-machine, not project code)
+.agents/
+.pi/
+.codex/
+
+# CodeGraph local index (generated, per-machine)
+.codegraph/
