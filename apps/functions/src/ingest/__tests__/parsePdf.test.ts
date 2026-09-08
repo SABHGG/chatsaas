@@ -1,52 +1,52 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { Buffer } from 'node:buffer'
-import { parsePdf, splitPdfPages } from '../parsePdf'
+import { parsePdf, normalizePages } from '../parsePdf'
 
-const pdfParseMock = vi.fn()
+const extractTextMock = vi.fn()
 
 beforeEach(() => {
-  pdfParseMock.mockReset()
+  extractTextMock.mockReset()
 })
 
-const deps = { pdfParse: pdfParseMock }
+const deps = { extractText: extractTextMock }
 
-describe('splitPdfPages', () => {
-  it('splits on form-feed and drops the trailing empty page', () => {
-    const pages = splitPdfPages({ text: 'a\fb\fc\f', numpages: 3 })
-    expect(pages).toEqual(['a', 'b', 'c'])
+describe('normalizePages', () => {
+  it('trims whitespace on each page', () => {
+    expect(normalizePages(['  x  ', '  y  '])).toEqual(['x', 'y'])
   })
 
-  it('trims whitespace on each page', () => {
-    expect(splitPdfPages({ text: '  x  \f  y  ', numpages: 2 })).toEqual(['x', 'y'])
+  it('keeps empty pages (the caller decides whether to drop them)', () => {
+    expect(normalizePages(['text', '   '])).toEqual(['text', ''])
   })
 })
 
 describe('parsePdf', () => {
-  it('returns one entry per page', async () => {
-    pdfParseMock.mockResolvedValueOnce({
-      text: 'Page 1 content\fPage 2 content',
-      numpages: 2,
+  it('returns one trimmed entry per page (unpdf per-page shape)', async () => {
+    extractTextMock.mockResolvedValueOnce({
+      totalPages: 2,
+      text: ['Page 1 content', 'Page 2 content'],
     })
     const pages = await parsePdf(Buffer.from('ignored'), deps)
     expect(pages).toEqual(['Page 1 content', 'Page 2 content'])
+    expect(extractTextMock).toHaveBeenCalledWith(new Uint8Array(Buffer.from('ignored')))
   })
 
-  it('drops a trailing empty page from the form-feed split', async () => {
-    pdfParseMock.mockResolvedValueOnce({
-      text: 'Only page\f',
-      numpages: 1,
+  it('keeps empty pages as empty strings for the caller to drop', async () => {
+    extractTextMock.mockResolvedValueOnce({
+      totalPages: 2,
+      text: ['Only real page', '   '],
     })
     const pages = await parsePdf(Buffer.from('ignored'), deps)
-    expect(pages).toEqual(['Only page'])
+    expect(pages).toEqual(['Only real page', ''])
   })
 
   it('returns an empty array for an empty buffer', async () => {
     await expect(parsePdf(Buffer.alloc(0), deps)).rejects.toThrow(/empty/)
-    expect(pdfParseMock).not.toHaveBeenCalled()
+    expect(extractTextMock).not.toHaveBeenCalled()
   })
 
   it('propagates the underlying parse error', async () => {
-    pdfParseMock.mockRejectedValueOnce(new Error('corrupt header'))
+    extractTextMock.mockRejectedValueOnce(new Error('invalid pdf structure'))
     await expect(parsePdf(Buffer.from('not a pdf'), deps)).rejects.toThrow()
   })
 })
