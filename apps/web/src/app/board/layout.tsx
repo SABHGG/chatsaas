@@ -16,6 +16,14 @@ export default async function BoardLayout({ children }: { children: React.ReactN
 
   return (
     <OperatorProvider operatorId={session.sub}>
+      {/* First focusable element: the keyboard path straight to the pane
+          content, skipping the header nav. */}
+      <a
+        href="#board-main"
+        className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-6 focus-visible:top-4 focus-visible:z-50 focus-visible:border focus-visible:border-foreground/70 focus-visible:bg-card focus-visible:px-3 focus-visible:py-2 focus-visible:text-sm focus-visible:text-foreground"
+      >
+        Skip to content
+      </a>
       <header className="border-b border-border bg-background">
         <div className="mx-auto flex w-full max-w-5xl items-center gap-3 px-6 py-4 sm:gap-4">
           <Link
@@ -50,7 +58,7 @@ export default async function BoardLayout({ children }: { children: React.ReactN
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl px-6 py-10">{children}</main>
+      <main id="board-main" className="mx-auto w-full max-w-5xl px-6 py-10">{children}</main>
     </OperatorProvider>
   )
 }
