@@ -18,7 +18,12 @@ import { describe, expect, it } from 'vitest'
  *      no partial migrations, no reintroduced ivory/slate/amber classes.
  *   3. No Tailwind blue utilities anywhere (the generic blue SaaS rut
  *      stays banned in the new world too).
- *   4. No Spanish UI copy (PRODUCT.md: English copy only).
+ *   4. No Spanish UI copy (PRODUCT.md: English copy only) — with ONE
+ *      recorded exception: the marketing landing route group
+ *      `app/(landing)/` (WI-010, explicit founder decision — the Spanish
+ *      guest funnel at `/`). The exception is surgical; the board, the
+ *      wizard, the plan surface, login, and the visitor chat stay
+ *      English-only.
  */
 
 const SRC_ROOT = fileURLToPath(new URL('.', import.meta.url))
@@ -122,9 +127,12 @@ const SPANISH_COPY_MARKERS = [
 
 describe('world contract guard (shadcn/ui world)', () => {
   // This guard file itself names the banned markers, so it is the one
-  // exclusion; every other source and test file is scanned.
+  // exclusion; the (landing) route group is the other — the recorded
+  // WI-010 decision makes it the ONLY Spanish-copy surface in the
+  // product. Every other source and test file is scanned.
   const scanned = collectSourceFiles(SRC_ROOT).filter(
-    (file) => !file.endsWith('world-contract.test.ts'),
+    (file) =>
+      !file.endsWith('world-contract.test.ts') && !file.includes('(landing)'),
   )
 
   it('scans the whole app source tree', () => {
@@ -190,7 +198,7 @@ describe('world contract guard (shadcn/ui world)', () => {
     expect(offenders, `Blue utilities found in: ${offenders.join(', ')}`).toEqual([])
   })
 
-  it('never ships Spanish UI copy (English only, PRODUCT.md)', () => {
+  it('never ships Spanish UI copy outside the landing surface (English only, PRODUCT.md + WI-010 exception)', () => {
     const offenders: Array<{ file: string; marker: string }> = []
     for (const file of scanned) {
       const content = readFileSync(file, 'utf8')

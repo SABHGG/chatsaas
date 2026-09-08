@@ -1,0 +1,78 @@
+# WI-010 Board Polish + Spanish Landing Tasks
+
+## Change
+- **Name**: WI-010-board-polish-spanish-landing
+- **Based on**: ADR-007 (visual system) + WI-007 (Flight-Strip world, completed) + DESIGN.md
+- **Artifact store**: Kaddo
+- **Branch**: feature/board-polish-landing
+- **Tests**: vitest (happy-dom) — landing redirect/content + world-contract guard
+- **Dependency**: none new (WI-007 world already landed; board data paths exist)
+
+## Recorded decision (founder, 2026-09-06)
+- The landing page copy is **Spanish** — an explicit user decision that
+  overrides the PRODUCT.md English-UI assumption **for the landing route only**.
+  Board/wizard/plan/login/visitor surfaces stay English-only; the world
+  contract guard keeps enforcing English everywhere except the landing route
+  group. Pricing stays qualitative (no invented numbers); no fabricated social
+  proof.
+
+## Tasks (implementation order)
+
+### 1. Dedupe verification
+- [x] Single components folder (`apps/web/src/components/`), one Button
+      implementation, consistent `@/components/...` imports; the two-folder
+      dedupe was completed in WI-007's rebuild — verify and report only.
+- **Dependencies**: none.
+
+### 2. Board loading states
+- [ ] `apps/web/src/app/board/loading.tsx` — in-world skeleton (rack strip +
+      pane shapes), squared, paper-on-ground, no new tokens.
+- [ ] `apps/web/src/app/board/plan/loading.tsx` — plan strips + meter skeleton.
+- **Dependencies**: none.
+
+### 3. Board accessibility polish
+- [ ] Skip-to-content link in the board layout (first focusable, in-world
+      styling).
+- [ ] Landmark/heading audit across board surfaces; fix real gaps only.
+- **Dependencies**: none.
+
+### 4. Landing route + root gate
+- [ ] `apps/web/src/app/(landing)/page.tsx` — Spanish landing: hero ("chatbot
+      de IA entrenado con los documentos de tu empresa, sin tocar AWS"),
+      how-it-works (crear chatbot / subir documentos / compartir URL o iframe),
+      benefits, FAQ + honest social-proof placeholder, CTA to /login, footer.
+      Qualitative pricing copy only.
+- [ ] `apps/web/src/app/page.tsx` — server gate: `getSession()` →
+      `redirect('/board')` when authenticated; guest → landing.
+- **Dependencies**: none.
+
+### 5. World-contract guard update
+- [ ] `apps/web/src/world-contract.test.ts`: exclude the `(landing)` route
+      group from the Spanish-copy scan (cites this WI's recorded decision);
+      retired tokens, legacy hexes, blue utilities remain banned tree-wide.
+- **Dependencies**: Task 4.
+
+### 6. Landing tests
+- [ ] `apps/web/src/app/(landing)/page.test.tsx`: guest → landing rendered
+      (Spanish sections + /login CTA href); authenticated → redirect('/board');
+      session read failure degrades to the landing (never a 500).
+- **Dependencies**: Task 4.
+
+### 7. DESIGN.md + finish
+- [ ] `apps/web/DESIGN.md`: document the landing surface, the root-redirect
+      behavior, and the copy-language exception.
+- [ ] Gates: `pnpm -F @chatsaas/web test|type-check|lint|build` green.
+- **Dependencies**: Tasks 1–6.
+
+## Risks
+- R-1 (MEDIUM) Spanish copy vs world-contract guard → surgical `(landing)`
+  exclusion, everything else still enforced.
+- R-2 (LOW) Root regression for operators → session gate server-side; session
+  read failure degrades to the landing.
+- R-3 (LOW) Pricing invention → qualitative copy only.
+- R-4 (LOW) Scope creep into a board rebuild → polish only.
+
+## Validation
+- `pnpm -F @chatsaas/web test` green; `type-check`, `lint`, `build` green.
+- Manual smoke: guest at `/` sees the Spanish landing; valid session at `/`
+  lands on /board.

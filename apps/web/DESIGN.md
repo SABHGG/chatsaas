@@ -263,7 +263,21 @@ retained only for the stamp press.
   DATA — pricing not final" note (pricing is undecided in PRODUCT.md).
 - **`/login`** — the sign-in log: one paper card on the rack ground,
   `label-mono` heading, one primary button. OAuth2 + PKCE via route handlers.
-- **Redirects:** `/` → `/board`; `/board/chatbots/[id]` → `/board?line=<id>`.
+- **`/`** — the Spanish marketing landing (WI-010, guest funnel): hero with
+  the value prop ("chatbot de IA entrenado con los documentos de tu empresa,
+  sin tocar AWS"), a 3-step how-it-works, benefits, FAQ plus an HONEST
+  social-proof placeholder (an unfilled dashed strip — no invented logos,
+  quotes, or numbers), CTA to /login, footer. Rides the operator's material
+  world (rack ground, paper cards, ink, hairlines, mono instruments); the
+  inscription red appears at rest exactly ONCE per page (the hero CTA — the
+  surface's lever). Pricing stays qualitative — limits, never numbers.
+  **Copy language: Spanish**, a recorded founder decision (WI-010) that
+  overrides the English-UI rule for this surface ONLY; the content is
+  wrapped in `lang="es"` for assistive tech, and the world-contract guard
+  exempts exactly this route group.
+- **Redirects:** `/` → the landing for guests, `/board` server-side for an
+  authenticated operator (`getSession`; a failed session read degrades to
+  the landing); `/board/chatbots/[id]` → `/board?line=<id>`.
 
 ## Do's and Don'ts
 
@@ -272,7 +286,9 @@ retained only for the stamp press.
 - **Do** set every quantity in mono (`.readout-mono`) and every section mark/stamp in `.label-mono`.
 - **Do** keep `--stamp #c8331f` the only saturated color, at stamp/lever scale, one live stamp per surface.
 - **Do** keep corners squared — derive any radius from `--radius: 0.125rem`.
-- **Do** build confirmations on the paper Dialog, keep copy in English, and pin `color-scheme: light`.
+- **Do** build confirmations on the paper Dialog, keep copy in English (the
+  `/` marketing landing is the single recorded Spanish exception — WI-010),
+  and pin `color-scheme: light`.
 
 ### Don't:
 - **Don't** use gradients — the world is flat material, not light effects.
