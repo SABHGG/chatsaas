@@ -1,0 +1,3 @@
+# Visual-check sidecars: keep only the dark screenshots in the repo.
+# Light-theme PNGs are regenerable via `visual-check` (see archify skill).
+*.visual-check.*.light.png

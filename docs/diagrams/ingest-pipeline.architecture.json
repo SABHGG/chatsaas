@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "chatSaaS — Async Document Ingest",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "docs/diagrams/ingest-pipeline.html"
+  },
+  "components": [
+    { "id": "s3", "type": "cloud", "label": "S3 Documents Bucket", "sublabel": "source documents", "pos": [40, 220], "size": [150, 66] },
+    { "id": "eventbridge", "type": "messagebus", "label": "EventBridge", "sublabel": "S3 ObjectCreated", "pos": [290, 220], "size": [150, 56] },
+    { "id": "ingest_lambda", "type": "backend", "label": "Ingest Lambda", "sublabel": "parse · chunk · embed", "pos": [560, 210], "size": [160, 66] },
+    { "id": "ssm", "type": "security", "label": "SSM SecureString", "sublabel": "chatsaas-{env}-neon-url", "pos": [580, 420], "size": [150, 62] },
+    { "id": "bedrock", "type": "cloud", "label": "Amazon Bedrock", "sublabel": "Titan v2 embed", "pos": [900, 100], "size": [150, 66] },
+    { "id": "neon", "type": "database", "label": "Neon Postgres", "sublabel": "public.embeddings · HNSW", "tag": "external SaaS", "brand": "neon", "pos": [900, 270], "size": [150, 66] },
+    { "id": "dynamodb", "type": "database", "label": "DynamoDB", "sublabel": "documents table", "pos": [900, 460], "size": [150, 66] }
+  ],
+  "connections": [
+    { "from": "s3", "to": "eventbridge", "label": "ObjectCreated" },
+    { "from": "eventbridge", "to": "ingest_lambda", "label": "invoke ingest", "variant": "emphasis" },
+    { "from": "ingest_lambda", "to": "s3", "label": "download source", "variant": "dashed", "fromSide": "top", "toSide": "top" },
+    { "from": "ingest_lambda", "to": "bedrock", "label": "embed chunks (1024-d)" },
+    { "from": "ingest_lambda", "to": "neon", "label": "INSERT embeddings", "variant": "emphasis", "labelDx": 70 },
+    { "from": "ingest_lambda", "to": "dynamodb", "label": "document status" },
+    { "from": "ingest_lambda", "to": "ssm", "label": "resolve Neon URL", "fromSide": "bottom", "toSide": "top" }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Pipeline Steps",
+      "items": [
+        "Browser upload lands in S3 via presigned URL (Operator Surface diagram)",
+        "EventBridge routes ObjectCreated to the Ingest Lambda (DLQ on failure)",
+        "In-Lambda parsers (PDF, DOCX, text) feed the chunk splitter",
+        "Bedrock Titan v2 embeds up to 25 chunks per InvokeModel call"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Neon Write Path (ADR-008)",
+      "items": [
+        "Non-VPC Lambda resolves the pooled connection string from SSM SecureString",
+        "Embeddings land in public.embeddings: vector(1024) + HNSW cosine index",
+        "INSERT ... ON CONFLICT (chatbot_id, content_sha256) DO NOTHING keeps it idempotent",
+        "Schema is applied by migration script, not Aurora-era custom resources"
+      ]
+    }
+  ]
+}

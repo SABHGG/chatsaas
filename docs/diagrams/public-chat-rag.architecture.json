@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "chatSaaS — Public Chat RAG Turn",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "output": "docs/diagrams/public-chat-rag.html"
+  },
+  "components": [
+    { "id": "visitor_browser", "type": "external", "label": "Visitor Browser", "sublabel": "public chat page / iframe", "pos": [40, 230], "size": [128, 62] },
+    { "id": "api_lambda", "type": "backend", "label": "API Lambda (Fastify)", "sublabel": "public chat endpoints", "pos": [400, 220], "size": [170, 78] },
+    { "id": "ssm", "type": "security", "label": "SSM SecureString", "sublabel": "chatsaas-{env}-neon-url", "pos": [400, 390], "size": [150, 62] },
+    { "id": "bedrock", "type": "cloud", "label": "Amazon Bedrock", "sublabel": "Titan v2 embed · LLM", "pos": [800, 120], "size": [150, 66] },
+    { "id": "neon", "type": "database", "label": "Neon Postgres", "sublabel": "pgvector · HNSW · pooled", "tag": "external SaaS", "brand": "neon", "pos": [800, 270], "size": [150, 66] },
+    { "id": "dynamodb", "type": "database", "label": "DynamoDB", "sublabel": "turns · credits · limits", "pos": [800, 420], "size": [150, 66] }
+  ],
+  "connections": [
+    { "from": "visitor_browser", "to": "api_lambda", "label": "HTTPS · public API base", "variant": "emphasis" },
+    { "from": "api_lambda", "to": "bedrock", "label": "embed question · LLM" },
+    { "from": "api_lambda", "to": "neon", "label": "retrieve top-k (cosine)", "variant": "emphasis" },
+    { "from": "api_lambda", "to": "dynamodb", "label": "persist · debit", "fromSide": "bottom", "toSide": "top" },
+    { "from": "api_lambda", "to": "ssm", "label": "resolve Neon URL", "fromSide": "bottom", "toSide": "top", "labelAt": [540, 312] }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "One Turn, Six Steps",
+      "items": [
+        "Anonymous turn: no cookies, no tokens by design (WI-009)",
+        "Bedrock Titan v2 embeds the question (1024-d); Neon retrieves top-k by cosine distance",
+        "Tenant predicates (chatbot_id + company_id) scope every query (ADR-006)",
+        "Bedrock LLM completes the grounded prompt; the turn is persisted and one credit debited"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Data Plane (ADR-008)",
+      "items": [
+        "Non-VPC Lambda reaches Neon over TLS via @neondatabase/serverless",
+        "Pooled -pooler endpoint (built-in PgBouncer); no RDS Proxy, no NAT",
+        "Autosuspend: the first query after ~5 min idle pays a wake-up latency"
+      ]
+    }
+  ]
+}
