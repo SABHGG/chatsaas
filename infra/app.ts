@@ -27,5 +27,5 @@ new ChatSaaSStack(app, "ChatSaaSStack", {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION ?? "us-east-1",
   },
-  description: "chatSaaS dev stack: Aurora Serverless v2 + pgvector + RDS Proxy + Secrets Manager",
+  description: "chatSaaS dev stack: Neon pgvector vector store + ingest pipeline + Cognito identity",
 });

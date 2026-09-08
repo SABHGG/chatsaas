@@ -1,6 +1,4 @@
 import { Duration, Stack } from "aws-cdk-lib";
-import type { ISecurityGroup, IVpc, SubnetSelection } from "aws-cdk-lib/aws-ec2";
-import { SubnetType } from "aws-cdk-lib/aws-ec2";
 import type { IFunction } from "aws-cdk-lib/aws-lambda";
 import {
   Code,
@@ -11,26 +9,29 @@ import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import type { ITable } from "aws-cdk-lib/aws-dynamodb";
 import type { IBucket } from "aws-cdk-lib/aws-s3";
-import type { ISecret } from "aws-cdk-lib/aws-secretsmanager";
 import type { IQueue } from "aws-cdk-lib/aws-sqs";
-import type { CustomResource } from "aws-cdk-lib/core";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Construct } from "constructs";
 
 /**
- * IngestLambda: triggered by EventBridge on s3:ObjectCreated:Put; reads the S3 object,
- * parses it, embeds via Bedrock Titan v2, persists to `public.embeddings` via RDS Data API,
- * and updates the Document row in DynamoDB.
+ * IngestLambda: triggered by EventBridge on s3:ObjectCreated:Put; reads the S3
+ * object, parses it, embeds via Bedrock Titan v2, persists to `public.embeddings`
+ * on Neon via the @neondatabase/serverless HTTP driver (ADR-008), and updates the
+ * Document row in DynamoDB.
  *
- * IAM is least-privilege: scoped to the documents bucket ARN, the documents table ARN,
- * the companies table ARN, the Bedrock Titan v2 model ARN, the cluster ARN, the secret
- * ARN, and the DLQ ARN. The Lambda is the only path in.
+ * The Lambda runs OUTSIDE any VPC: S3, DynamoDB, Bedrock, and SSM are reached
+ * over public endpoints, and Neon is reached over TLS through the pooled
+ * `-pooler` endpoint.
  *
- * The handler is at `apps/functions/src/ingest/handler.ts` (sibling of the infra package);
- * `__dirname` resolution is relative to this file (`infra/lib/`), so the path is
- * `../../apps/functions/src/ingest/handler.ts`.
+ * IAM is least-privilege: scoped to the documents bucket ARN, the documents
+ * table ARN, the Bedrock Titan v2 model ARN, the Neon URL SSM parameter, and
+ * the DLQ ARN. The Lambda is the only path in.
+ *
+ * The handler is at `apps/functions/src/ingest/handler.ts` (sibling of the infra
+ * package); `__dirname` resolution is relative to this file (`infra/lib/`), so
+ * the path is `../../apps/functions/src/ingest/handler.ts`.
  */
 const HANDLER_PATH = join(
   fileURLToPath(import.meta.url),
@@ -48,14 +49,9 @@ export interface IngestLambdaConstructProps {
   readonly envName: "dev" | "prod";
   readonly documentsBucket: IBucket;
   readonly documentsTable: ITable;
-  readonly dbSecret: ISecret;
-  readonly dbClusterArn: string;
-  readonly dbName: string;
-  readonly vpc: IVpc;
-  readonly lambdaSecurityGroup: ISecurityGroup;
+  /** Name of the SSM SecureString holding the pooled Neon connection string. */
+  readonly neonUrlParameterName: string;
   readonly dlq: IQueue;
-  readonly documentsIndexResource: CustomResource;
-  readonly subnetSelection?: SubnetSelection;
 }
 
 export class IngestLambdaConstruct extends Construct {
@@ -75,10 +71,7 @@ export class IngestLambdaConstruct extends Construct {
       handler: "handler",
       memorySize: 1024,
       timeout: Duration.minutes(5),
-      vpc: props.vpc,
-      vpcSubnets:
-        props.subnetSelection ?? { subnetType: SubnetType.PRIVATE_WITH_EGRESS },
-      securityGroups: [props.lambdaSecurityGroup],
+      // Non-VPC by design (ADR-008): no vpc / vpcSubnets / securityGroups.
       tracing: Tracing.ACTIVE,
       logRetention: RetentionDays.ONE_MONTH,
       deadLetterQueue: props.dlq,
@@ -87,14 +80,15 @@ export class IngestLambdaConstruct extends Construct {
         minify: true,
         sourceMap: true,
         target: "node20",
-        externalModules: ["@aws-sdk/*"],
+        // Bundle every dependency — @neondatabase/serverless (fetch-based ESM)
+        // and @aws-sdk/client-ssm are NOT in the Lambda Node 20 runtime's
+        // bundled SDK subset, so nothing is left to the runtime's discretion.
+        externalModules: [],
       },
       environment: {
         DOCUMENTS_BUCKET: props.documentsBucket.bucketName,
         DOCUMENTS_TABLE: props.documentsTable.tableName,
-        DB_SECRET_ARN: props.dbSecret.secretArn,
-        DB_CLUSTER_ARN: props.dbClusterArn,
-        DB_NAME: props.dbName,
+        NEON_URL_PARAMETER_NAME: props.neonUrlParameterName,
         BEDROCK_EMBED_MODEL_ID: "amazon.titan-embed-text-v2:0",
         CHUNK_SIZE: "1000",
         CHUNK_OVERLAP: "200",
@@ -122,17 +116,17 @@ export class IngestLambdaConstruct extends Construct {
       }),
     );
 
-    // RDS Data API: execute statements on the cluster.
+    // SSM: read the Neon URL SecureString only (least privilege; WithDecryption
+    // against the AWS-managed `aws/ssm` key needs no extra kms grant).
     fn.addToRolePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
-        actions: ["rds-data:ExecuteStatement"],
-        resources: [props.dbClusterArn],
+        actions: ["ssm:GetParameter"],
+        resources: [
+          `arn:aws:ssm:${region}:${account}:parameter/${props.neonUrlParameterName}`,
+        ],
       }),
     );
-
-    // Secrets Manager: read the master password for RDS Data API auth.
-    props.dbSecret.grantRead(fn);
 
     // DLQ writes happen automatically via the L2 deadLetterQueue wiring, but be explicit.
     fn.addToRolePolicy(
@@ -143,12 +137,6 @@ export class IngestLambdaConstruct extends Construct {
       }),
     );
 
-    // Ensure the unique index custom resource runs before the Lambda can invoke.
-    fn.node.addDependency(props.documentsIndexResource);
-
     this.function = fn;
-    // Touch the unused `account` for symmetry; the construct API doesn't expose it but
-    // future ARNs may need it.
-    void account;
   }
 }

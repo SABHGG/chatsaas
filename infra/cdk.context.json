@@ -1,6 +1,1 @@
-{
-  "vpcId": "vpc-12345",
-  "privateSubnetIds": "subnet-1,subnet-2",
-  "availabilityZones": "us-east-1a,us-east-1b",
-  "skipProxy": "true"
-}
+{}

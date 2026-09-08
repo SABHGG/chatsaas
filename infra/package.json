@@ -15,7 +15,6 @@
   "dependencies": {
     "@aws-sdk/client-cognito-identity-provider": "^3.1116.0",
     "@aws-sdk/client-dynamodb": "^3.1116.0",
-    "@aws-sdk/client-rds-data": "^3.1116.0",
     "@aws-sdk/lib-dynamodb": "^3.1116.0",
     "aws-cdk-lib": "^2.266.0",
     "constructs": "^10.3.0",
