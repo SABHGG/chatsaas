@@ -3,12 +3,12 @@ type: feature
 id: WI-004
 title: "CDK app bootstrap with Neon pgvector (Aurora retired)"
 knowledge_level: K2
-status: ready
+status: completed
 phase: now
 branch: feature/WI-004-neon-vector-store
 initiative: "RM-001"
 created_at: "2026-08-28"
-updated_at: "2026-09-05"
+updated_at: "2026-09-08"
 source: ADR-008
 source_id: adr-008-2026-09-05
 source_title: "Use Neon for the Vector Store (ADR-008)"
@@ -136,3 +136,11 @@ This WI was originally scoped as "CDK app bootstrap with Aurora Serverless v2 + 
 - `infra/lib/security-groups.ts` LambdaSG (`allowAllOutbound: false`) only permitted 5432 egress to the proxy SG, but the Lambdas attached to it also needed HTTPS 443 outbound for RDS Data API, S3, DynamoDB, and Bedrock — runtime egress timeouts as synthesized.
 
 — are **moot under Neon**: the cluster construct and every security group are deleted; the only database is Neon reached over TLS from non-VPC Lambdas.
+
+## Completion (2026-09-08)
+
+Implemented and merged via PR #1 (`feature/WI-004-neon-vector-store` → main, merge `3332c5e`); fixes landed directly on main in `71a6583`/`0b1e2ad` where noted below.
+
+- All acceptance criteria verified: `cdk synth` clean (no RDS/VPC data-plane), vitest suite green, migration applied to the real Neon dev project (`public.embeddings` with HNSW + unique `(chatbot_id, content_sha256)`), ingest smoke wrote embeddings end-to-end.
+- **Follow-up fix (2026-09-08, `71a6583`)**: the public chat retrieval path still read the retired Aurora RDS Data API after the merge; it now reads Neon directly (`retrieveChunks` on `@neondatabase/serverless`, positional params, R-1 scope preserved). Verified live against the sandbox stack.
+- **Pending manual**: the `chatsaas-dev-neon-url` SSM SecureString is still not created in a real AWS account (sandbox resolves `NEON_DATABASE_URL` directly); required before any deployed Lambda can resolve the URL.

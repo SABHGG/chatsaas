@@ -3,7 +3,8 @@ type: feature
 id: WI-010
 title: "Board polish + Spanish marketing landing at / (guest funnel)"
 knowledge_level: K2
-status: ready
+status: completed
+updated_at: "2026-09-08"
 phase: now
 initiative: "RM-001"
 domains:
@@ -146,3 +147,7 @@ cloud vocabulary.
 None blocking. The Spanish landing and the qualitative-pricing constraint are
 explicit founder decisions recorded above; pricing tiers remain deferred
 (PRODUCT.md "Explicitly undecided"), which the landing copy respects.
+
+## Completion (2026-09-08)
+
+Implemented and merged via PR #2 (`feature/board-polish-landing` → main, merge `28c1548`), then verified end-to-end on the merged main: Spanish landing served at `/`, guest funnel redirects to `/login`, Operator's Board renders post-login, wizard completes through plan selection and publish (sandbox), and the published chatbot's visitor page + iframe embed answer grounded questions.

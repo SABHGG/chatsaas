@@ -264,3 +264,5 @@ All decision candidates for this WI are resolved (2026-08-28). The WI is eligibl
 The dependency graph in the round is linear at the top: **WI-004 → WI-005 → WI-006**. WI-007 fans out from both WI-005 and WI-006. WI-008 sits at the leaf. This WI is the second of four implementation WIs in the round and the first one that touches Bedrock at runtime.
 
 > 2026-09-05: ADR-008 supersedes the Aurora/RDS Proxy data plane described in this record; the active path is Neon (see knowledge/tech/decisions/008-use-neon-for-vector-store.md).
+
+> 2026-09-08: PDF extraction swapped from `pdf-parse@1.1.1` to `unpdf` (modern pdf.js serverless build) in commit `0b1e2ad` — the bundled 2018 pdf.js failed on Flate-compressed streams from current PDF generators ("Unknown compression method in flate stream"), leaving fresh uploads `failed`. unpdf returns per-page text directly; real CV PDFs that previously failed now ingest end-to-end, and `content_sha256` dedupe across identical re-uploads verified on Neon.
