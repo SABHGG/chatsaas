@@ -5,6 +5,8 @@ import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-
 import { z } from 'zod'
 import { resolveChatbotScope } from '../retrieval/resolveChatbotScope.js'
 import { checkLimits, loadLimitSnapshot, CREDIT_ALERT_HEADER, CREDIT_ALERT_VALUE } from '../retrieval/checkLimits.js'
+import { neonQueryFn, type NeonQueryFn } from '../ingest/persistEmbeddings.js'
+import { resolveNeonUrl } from '../ingest/neonUrl.js'
 import { debitConversation } from '../retrieval/debitConversation.js'
 import { embedQuestion } from '../retrieval/embedQuestion.js'
 import { retrieveChunks } from '../retrieval/retrieveChunks.js'
@@ -52,12 +54,8 @@ export interface ChatRouteEnv {
   messagesTable: string
   subscriptionsTable: string
   creditsTable: string
-  rds: {
-    clusterArn: string
-    secretArn: string
-    database: string
-    region: string
-  }
+  /** SSM SecureString name holding the Neon pooled URL (ADR-008). */
+  neonParameterName: string
   bedrockRegion: string
   embedModelId: string
   chatModelId: string
@@ -75,9 +73,7 @@ export function chatRouteEnvFromProcess(): ChatRouteEnv | null {
     'MESSAGES_TABLE_NAME',
     'SUBSCRIPTIONS_TABLE_NAME',
     'CREDITS_TABLE_NAME',
-    'RDS_CLUSTER_ARN',
-    'RDS_SECRET_ARN',
-    'RDS_DATABASE',
+    'NEON_URL_PARAMETER_NAME',
     'BEDROCK_EMBED_MODEL_ID',
     'CHAT_MODEL_ID',
   ] as const
@@ -89,12 +85,7 @@ export function chatRouteEnvFromProcess(): ChatRouteEnv | null {
     messagesTable: process.env.MESSAGES_TABLE_NAME!,
     subscriptionsTable: process.env.SUBSCRIPTIONS_TABLE_NAME!,
     creditsTable: process.env.CREDITS_TABLE_NAME!,
-    rds: {
-      clusterArn: process.env.RDS_CLUSTER_ARN!,
-      secretArn: process.env.RDS_SECRET_ARN!,
-      database: process.env.RDS_DATABASE!,
-      region: process.env.AWS_REGION ?? 'us-east-1',
-    },
+    neonParameterName: process.env.NEON_URL_PARAMETER_NAME!,
     bedrockRegion: process.env.AWS_REGION ?? 'us-east-1',
     embedModelId: process.env.BEDROCK_EMBED_MODEL_ID!,
     chatModelId: process.env.CHAT_MODEL_ID!,
@@ -144,11 +135,15 @@ function logStructured(level: 'info' | 'error', message: string, ctx: Record<str
   else console.log(JSON.stringify(line))
 }
 
-const chatPublicMessagePlugin: FastifyPluginAsync<{ env: ChatRouteEnv }> = async (
+const chatPublicMessagePlugin: FastifyPluginAsync<{
+  env: ChatRouteEnv
+  deps?: ChatPublicMessageDeps
+}> = async (
   fastify,
   opts,
 ) => {
   const env = opts.env
+  const deps = opts.deps ?? {}
   const ddb = DynamoDBDocumentClient.from(new DynamoDBClient({}), {
     marshallOptions: { removeUndefinedValues: true },
   })
@@ -213,18 +208,16 @@ const chatPublicMessagePlugin: FastifyPluginAsync<{ env: ChatRouteEnv }> = async
 
         // 5. Retrieve top-K chunks (filters from the chatbot row only).
         const retrievalStarted = Date.now()
-        const chunks = await retrieveChunks(
-          {
-            clusterArn: env.rds.clusterArn,
-            secretArn: env.rds.secretArn,
-            database: env.rds.database,
-            region: env.rds.region,
-            chatbotId: scope.chatbotId,
-            companyId: scope.companyId,
-            embedding,
-            topK: env.topK,
-          },
-        )
+        const query =
+          deps.neonQuery ??
+          neonQueryFn(await resolveNeonUrl(env.neonParameterName))
+        const chunks = await retrieveChunks({
+          query,
+          chatbotId: scope.chatbotId,
+          companyId: scope.companyId,
+          embedding,
+          topK: env.topK,
+        })
         const retrievalMs = Date.now() - retrievalStarted
 
         // 5.5 Conversation ownership check (cross-tenant leak guard):
@@ -383,9 +376,17 @@ const chatPublicMessagePlugin: FastifyPluginAsync<{ env: ChatRouteEnv }> = async
   )
 }
 
-export async function chatPublicMessageFactory(env: ChatRouteEnv) {
+export interface ChatPublicMessageDeps {
+  /** Injected Neon query fn (tests); production resolves the SSM Neon URL. */
+  neonQuery?: NeonQueryFn
+}
+
+export async function chatPublicMessageFactory(
+  env: ChatRouteEnv,
+  deps: ChatPublicMessageDeps = {},
+) {
   const fastify = Fastify()
-  await fastify.register(chatPublicMessagePlugin, { env })
+  await fastify.register(chatPublicMessagePlugin, { env, deps })
   return fastify
 }
 

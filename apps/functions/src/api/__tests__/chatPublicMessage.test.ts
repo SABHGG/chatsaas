@@ -3,13 +3,20 @@ import { mockClient } from 'aws-sdk-client-mock'
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, GetCommand, UpdateCommand, QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb'
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime'
-import { RDSDataClient, ExecuteStatementCommand } from '@aws-sdk/client-rds-data'
 import { chatPublicMessageFactory, type ChatRouteEnv } from '../chatPublicMessage'
 
 const lowMock = mockClient(DynamoDBClient)
 const docMock = mockClient(DynamoDBDocumentClient)
 const brMock = mockClient(BedrockRuntimeClient)
-const rdsMock = mockClient(RDSDataClient)
+import type { NeonQueryFn } from '../../ingest/persistEmbeddings'
+
+// Neon retrieval stub: captures issued SQL and returns canned rows.
+let neonRows: unknown[] = []
+const neonCalls: Array<{ sql: string; params: unknown[] }> = []
+const neonQuery: NeonQueryFn = async (sql, params) => {
+  neonCalls.push({ sql, params: (params ?? []) as unknown[] })
+  return neonRows
+}
 
 const ENV: ChatRouteEnv = {
   chatbotsTable: 'chatbots',
@@ -17,12 +24,7 @@ const ENV: ChatRouteEnv = {
   messagesTable: 'messages',
   subscriptionsTable: 'subscriptions',
   creditsTable: 'credits',
-  rds: {
-    clusterArn: 'arn:aws:rds:us-east-1:1:cluster:c',
-    secretArn: 'arn:aws:secretsmanager:us-east-1:1:secret:s',
-    database: 'chatsaas',
-    region: 'us-east-1',
-  },
+  neonParameterName: 'chatsaas-dev-neon-url',
   bedrockRegion: 'us-east-1',
   embedModelId: 'amazon.titan-embed-text-v2:0',
   chatModelId: 'anthropic.claude-3-5-sonnet-20240620-v1:0',
@@ -74,9 +76,7 @@ function defaultsNoBlocks() {
       ),
     })
   })
-  rdsMock.on(ExecuteStatementCommand).resolves({
-    records: [[{ stringValue: 'r1' }, { stringValue: 'chunk content' }, { doubleValue: 0.1 }]],
-  })
+    neonRows = [{ id: 'r1', content: 'chunk content', score: 0.1 }]
   docMock.on(PutCommand).resolves({})
   docMock.on(UpdateCommand).resolves({})
 }
@@ -85,7 +85,8 @@ beforeEach(() => {
   lowMock.reset()
   docMock.reset()
   brMock.reset()
-  rdsMock.reset()
+  neonRows = []
+  neonCalls.length = 0
 })
 
 const URL = '/chat-1/message'
@@ -93,7 +94,7 @@ const URL = '/chat-1/message'
 describe('chatPublicMessage handler (WI-006 pipeline)', () => {
   it('returns 200 with answer, conversation_id and sources', async () => {
     defaultsNoBlocks()
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
     expect(res.statusCode).toBe(200)
@@ -106,7 +107,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
 
   it('R-1: a spoofed body company_id is rejected and never reaches the query', async () => {
     defaultsNoBlocks()
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({
       method: 'POST',
@@ -119,12 +120,10 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
 
     // And even the happy-path SQL only ever receives the chatbot-row scope.
     await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
-    const sqlInput = rdsMock.calls()[0].args[0].input as ExecuteStatementCommand['input']
-    const params = Object.fromEntries(
-      ((sqlInput.parameters ?? []) as Array<{ name?: string; value?: { stringValue?: string } }>).map((p) => [p.name, p.value?.stringValue]),
-    )
-    expect(params.companyId).toBe('company-acme')
-    expect(params.companyId).not.toBe('spoofed-company')
+    expect(neonCalls).toHaveLength(1)
+    // Positional params: [vector, chatbotId, companyId, topK].
+    expect(neonCalls[0].params[2]).toBe('company-acme')
+    expect(neonCalls[0].params[2]).not.toBe('spoofed-company')
     await fastify.close()
   })
 
@@ -132,7 +131,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
     docMock
       .on(GetCommand, { TableName: 'chatbots', Key: { id: 'chat-1' } })
       .resolves({ Item: chatbotRow({ status: 'draft' }) })
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
     expect(res.statusCode).toBe(404)
@@ -142,7 +141,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
 
   it('404 for a missing chatbot', async () => {
     docMock.on(GetCommand, { TableName: 'chatbots', Key: { id: 'chat-1' } }).resolves({})
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
     expect(res.statusCode).toBe(404)
@@ -159,13 +158,13 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
     docMock
       .on(GetCommand, { TableName: 'credits', Key: { id: 'company-acme' } })
       .resolves({ Item: { id: 'company-acme', balance: 0, creditsOptedIn: false } })
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
     expect(res.statusCode).toBe(402)
     expect(JSON.parse(res.payload).error).toMatch(/monthly conversation limit/)
     expect(brMock.calls()).toHaveLength(0)
-    expect(rdsMock.calls()).toHaveLength(0)
+    expect(neonCalls).toHaveLength(0)
     await fastify.close()
   })
 
@@ -185,7 +184,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
       err.name = 'ConditionalCheckFailedException'
       throw err
     })
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
     expect(res.statusCode).toBe(402)
@@ -217,7 +216,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
       err.name = 'ConditionalCheckFailedException'
       throw err
     })
-    // The winner goes on to Bedrock + RDS + persist.
+    // The winner goes on to Bedrock + Neon + persist.
     brMock.on(InvokeModelCommand).callsFake((input: InvokeModelCommand["input"]) => {
       const body = JSON.parse(String(input.body))
       if (body.inputText !== undefined) {
@@ -234,10 +233,10 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
         ),
       })
     })
-    rdsMock.on(ExecuteStatementCommand).resolves({ records: [] })
+    neonRows = []
     docMock.on(PutCommand).resolves({})
 
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
     const [r1, r2] = await Promise.all([
       fastify.inject({ method: 'POST', url: URL, payload: { message: 'a' } }),
       fastify.inject({ method: 'POST', url: URL, payload: { message: 'b' } }),
@@ -254,7 +253,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
     docMock
       .on(GetCommand, { TableName: 'subscriptions', Key: { id: 'company-acme' } })
       .resolves({ Item: { id: 'company-acme', status: 'active', monthlyLimit: 100, monthlyUsed: 85 } })
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
     expect(res.statusCode).toBe(200)
@@ -286,10 +285,10 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
         ),
       })
     })
-    rdsMock.on(ExecuteStatementCommand).resolves({ records: [] })
+    neonRows = []
     docMock.on(PutCommand).resolves({})
     docMock.on(UpdateCommand).resolves({})
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
     expect(res.statusCode).toBe(200)
@@ -305,7 +304,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
         { role: 'assistant', content: 'first answer', createdAt: '2026-08-28T00:00:01Z' },
       ],
     })
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({
       method: 'POST',
@@ -325,7 +324,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
 
   it('persists the exact Bedrock token counts (R-8)', async () => {
     defaultsNoBlocks()
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
     await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
 
         const puts = docMock
@@ -358,10 +357,8 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
           err.name = "ValidationException"
           return Promise.reject(err)
         })
-        rdsMock
-          .on(ExecuteStatementCommand)
-          .resolves({ records: [[{ stringValue: "r1" }, { stringValue: "chunk" }, { doubleValue: 0.1 }]] })
-    const fastify = await chatPublicMessageFactory(ENV)
+        neonRows = [{ id: "r1", content: "chunk", score: 0.1 }]
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
     const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
     expect(res.statusCode).toBe(500)
@@ -373,7 +370,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
   })
 
   it('rejects messages over 2000 chars with 400 (strict validation)', async () => {
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
     const res = await fastify.inject({
       method: 'POST',
       url: URL,
@@ -387,7 +384,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
     defaultsNoBlocks()
     // The plugin itself is registered without opts.preHook in server.ts; here
     // we assert the route answers anonymously (no 401 without a token).
-    const fastify = await chatPublicMessageFactory(ENV)
+    const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
     const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
     expect(res.statusCode).not.toBe(401)
     await fastify.close()
@@ -416,10 +413,10 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
             ),
           })
         })
-        rdsMock.on(ExecuteStatementCommand).resolves({ records: [] })
+        neonRows = []
         docMock.on(PutCommand).resolves({})
         docMock.on(UpdateCommand).resolves({})
-        const fastify = await chatPublicMessageFactory(ENV)
+        const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
         const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
         expect(res.statusCode).toBe(200)
@@ -437,7 +434,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
         docMock.on(QueryCommand).resolves({
           Items: [{ role: 'user', content: 'FOREIGN SECRET', createdAt: '2026-08-28T00:00:00Z' }],
         })
-        const fastify = await chatPublicMessageFactory(ENV)
+        const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
         const res = await fastify.inject({
           method: 'POST',
@@ -467,7 +464,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
         docMock.on(QueryCommand).resolves({
           Items: [{ role: 'user', content: 'first question', createdAt: '2026-08-28T00:00:00Z' }],
         })
-        const fastify = await chatPublicMessageFactory(ENV)
+        const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
         const res = await fastify.inject({
           method: 'POST',
@@ -482,7 +479,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
 
       it('JD-A-002: monthlyUsed is atomically incremented after a successful turn', async () => {
         defaultsNoBlocks()
-        const fastify = await chatPublicMessageFactory(ENV)
+        const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
         await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
 
         const incr = docMock
@@ -506,7 +503,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
         docMock
           .on(GetCommand, { TableName: 'credits', Key: { id: 'company-acme' } })
           .resolves({ Item: { id: 'company-acme', balance: 0, creditsOptedIn: false } })
-        const fastify = await chatPublicMessageFactory(ENV)
+        const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
         const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
         expect(res.statusCode).toBe(402)
@@ -541,12 +538,10 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
           err.name = 'ValidationException'
           return Promise.reject(err)
         })
-        rdsMock
-          .on(ExecuteStatementCommand)
-          .resolves({ records: [[{ stringValue: 'r1' }, { stringValue: 'chunk' }, { doubleValue: 0.1 }]] })
+        neonRows = [{ id: "r1", content: "chunk", score: 0.1 }]
         docMock.on(PutCommand).resolves({})
         docMock.on(UpdateCommand).resolves({})
-        const fastify = await chatPublicMessageFactory(ENV)
+        const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
         const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
         expect(res.statusCode).toBe(500)
@@ -581,7 +576,7 @@ describe('chatPublicMessage handler (WI-006 pipeline)', () => {
           err.name = 'ConditionalCheckFailedException'
           throw err
         })
-        const fastify = await chatPublicMessageFactory(ENV)
+        const fastify = await chatPublicMessageFactory(ENV, { neonQuery })
 
         const res = await fastify.inject({ method: 'POST', url: URL, payload: { message: 'hi' } })
         expect(res.statusCode).toBe(402)

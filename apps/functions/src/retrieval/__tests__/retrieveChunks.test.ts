@@ -1,83 +1,89 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mockClient } from 'aws-sdk-client-mock'
-import { RDSDataClient, ExecuteStatementCommand } from '@aws-sdk/client-rds-data'
+import { describe, it, expect } from 'vitest'
 import { retrieveChunks } from '../retrieveChunks'
-
-const rdsMock = mockClient(RDSDataClient)
+import type { NeonQueryFn } from '../../ingest/persistEmbeddings'
 
 const BASE = {
-  clusterArn: 'arn:aws:rds:us-east-1:1:cluster:c',
-  secretArn: 'arn:aws:secretsmanager:us-east-1:1:secret:s',
-  database: 'chatsaas',
-  region: 'us-east-1',
   embedding: [0.1, 0.2, 0.3],
   topK: 10,
 }
 
-function row(id: string, score: number) {
-  return [
-    { stringValue: id },
-    { stringValue: `content of ${id}` },
-    { doubleValue: score },
-  ]
+/** Captures the (sql, params) the code issues and returns canned rows. */
+function fakeQuery(rows: unknown[]): { query: NeonQueryFn; calls: Array<{ sql: string; params: unknown[] }> } {
+  const calls: Array<{ sql: string; params: unknown[] }> = []
+  const query: NeonQueryFn = async (sql, params) => {
+    calls.push({ sql, params: (params ?? []) as unknown[] })
+    return rows
+  }
+  return { query, calls }
 }
 
-beforeEach(() => {
-  rdsMock.reset()
-})
-
-describe('retrieveChunks (R-1 scope, pgvector)', () => {
+describe('retrieveChunks (R-1 scope, pgvector over Neon)', () => {
   it('builds the query from the chatbot row values only — a spoofed body company_id cannot enter the SQL', async () => {
-    rdsMock.on(ExecuteStatementCommand).resolves({ records: [row('r1', 0.12)] })
+    const { query, calls } = fakeQuery([{ id: 'r1', content: 'c', score: 0.12 }])
 
-    await retrieveChunks(
-      { ...BASE, chatbotId: 'chat-1', companyId: 'company-from-chatbot-row' },
-      rdsMock as unknown as RDSDataClient,
-    )
+    await retrieveChunks({
+      ...BASE,
+      query,
+      chatbotId: 'chat-1',
+      companyId: 'company-from-chatbot-row',
+    })
 
-    const input = rdsMock.calls()[0].args[0].input as ExecuteStatementCommand['input']
-    expect(input.sql).toContain('chatbot_id = :chatbotId::uuid AND company_id = :companyId::uuid')
-    const params = Object.fromEntries(
-      ((input.parameters ?? []) as Array<{ name?: string; value?: { stringValue?: string; longValue?: number } }>).map((p) => [p.name, p.value?.stringValue ?? p.value?.longValue]),
-    )
+    expect(calls).toHaveLength(1)
+    const { sql, params } = calls[0]
+    expect(sql).toContain('chatbot_id = $2::uuid AND company_id = $3::uuid')
     // Trusted scope only: values come from the chatbot row, never a request.
-    expect(params.chatbotId).toBe('chat-1')
-    expect(params.companyId).toBe('company-from-chatbot-row')
-    expect(Object.keys(params)).not.toContain('companyIdFromBody')
-    expect(input.sql).toContain('ORDER BY embedding <=> :embedding::vector')
-    expect(input.sql).toContain('LIMIT :topK')
+    expect(params[1]).toBe('chat-1')
+    expect(params[2]).toBe('company-from-chatbot-row')
+    expect(sql).toContain('ORDER BY embedding <=> $1::vector')
+    expect(sql).toContain('LIMIT $4')
+    // Vector literal is the first parameter (positional, Neon driver).
+    expect(params[0]).toBe('[0.1,0.2,0.3]')
+    expect(params[3]).toBe(10)
   })
 
   it('returns chunks with id/content/score and respects topK', async () => {
-    rdsMock
-      .on(ExecuteStatementCommand)
-      .resolves({ records: [row('r1', 0.05), row('r2', 0.11), row('r3', 0.2)] })
+    const { query } = fakeQuery([
+      { id: 'r1', content: 'content of r1', score: 0.05 },
+      { id: 'r2', content: 'content of r2', score: 0.11 },
+      { id: 'r3', content: 'content of r3', score: 0.2 },
+    ])
 
-    const chunks = await retrieveChunks(
-      { ...BASE, chatbotId: 'chat-1', companyId: 'company-acme', topK: 3 },
-      rdsMock as unknown as RDSDataClient,
-    )
+    const chunks = await retrieveChunks({
+      ...BASE,
+      query,
+      chatbotId: 'chat-1',
+      companyId: 'company-acme',
+      topK: 3,
+    })
 
     expect(chunks).toHaveLength(3)
     expect(chunks[0]).toEqual({ id: 'r1', content: 'content of r1', score: 0.05 })
   })
 
   it('returns [] on zero rows (empty-retrieval path)', async () => {
-    rdsMock.on(ExecuteStatementCommand).resolves({ records: [] })
-    const chunks = await retrieveChunks(
-      { ...BASE, chatbotId: 'chat-1', companyId: 'company-acme' },
-      rdsMock as unknown as RDSDataClient,
-    )
+    const { query } = fakeQuery([])
+    const chunks = await retrieveChunks({
+      ...BASE,
+      query,
+      chatbotId: 'chat-1',
+      companyId: 'company-acme',
+    })
     expect(chunks).toEqual([])
   })
 
-  it('maps Data API failures to typed db_error', async () => {
-    rdsMock.on(ExecuteStatementCommand).rejects(new Error('Data API down'))
+  it('maps query failures to typed db_error', async () => {
+    const query: NeonQueryFn = async () => {
+      throw new Error('Neon down')
+    }
     await expect(
-      retrieveChunks(
-        { ...BASE, chatbotId: 'chat-1', companyId: 'company-acme' },
-        rdsMock as unknown as RDSDataClient,
-      ),
+      retrieveChunks({ ...BASE, query, chatbotId: 'chat-1', companyId: 'company-acme' }),
+    ).rejects.toMatchObject({ code: 'db_error' })
+  })
+
+  it('throws db_error when a row is missing id/content columns', async () => {
+    const { query } = fakeQuery([{ id: 'r1', score: 0.1 }])
+    await expect(
+      retrieveChunks({ ...BASE, query, chatbotId: 'chat-1', companyId: 'company-acme' }),
     ).rejects.toMatchObject({ code: 'db_error' })
   })
 })

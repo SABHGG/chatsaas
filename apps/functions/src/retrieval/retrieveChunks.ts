@@ -1,19 +1,23 @@
-import { RDSDataClient, ExecuteStatementCommand } from '@aws-sdk/client-rds-data'
 import { RetrievalError, type RetrievedChunk } from './types.js'
+import type { NeonQueryFn } from '../ingest/persistEmbeddings.js'
 
 /**
- * Multi-tenant pgvector retrieval through the RDS Data API (same connection
- * stack as WI-005 ingest — DC-005-5: RDS Data API for v1).
+ * Multi-tenant pgvector retrieval over the direct Neon HTTP driver
+ * (ADR-008 — the same connection stack as WI-005 ingest, replacing the
+ * retired Aurora RDS Data API path).
  *
  * R-1 (CRITICAL): the query filters are built ONLY from the chatbot row
  * values (`chatbotId` + `companyId` resolved by `resolveChatbotScope`).
  * Nothing from the request body/query string ever reaches this SQL.
+ *
+ * The `NeonQueryFn` is injectable for tests; production callers pass
+ * `neonQueryFn(await resolveNeonUrl(...))` (see
+ * api/chatPublicMessage.ts). Parameters are positional ($n) because the
+ * Neon HTTP driver has no named-parameter support.
  */
 export interface RetrieveChunksInput {
-  clusterArn: string
-  secretArn: string
-  database: string
-  region: string
+  /** Executable Neon query fn (pooled connection string resolved upstream). */
+  query: NeonQueryFn
   /** Trusted scope: chatbot row's `id`. */
   chatbotId: string
   /** Trusted scope: chatbot row's `companyId`. NEVER a request field. */
@@ -23,50 +27,42 @@ export interface RetrieveChunksInput {
   topK: number
 }
 
+interface RetrievalRow {
+  id?: unknown
+  content?: unknown
+  score?: unknown
+}
+
 export async function retrieveChunks(
   input: RetrieveChunksInput,
-  rds?: RDSDataClient,
 ): Promise<RetrievedChunk[]> {
-  const client = rds ?? new RDSDataClient({ region: input.region })
   const sql = `
-    SELECT id, content, embedding <=> :embedding::vector AS score
+    SELECT id, content, embedding <=> $1::vector AS score
     FROM public.embeddings
-    WHERE chatbot_id = :chatbotId::uuid AND company_id = :companyId::uuid
-    ORDER BY embedding <=> :embedding::vector
-    LIMIT :topK;
+    WHERE chatbot_id = $2::uuid AND company_id = $3::uuid
+    ORDER BY embedding <=> $1::vector
+    LIMIT $4;
   `
-  let resp
+  let rows: unknown
   try {
-    resp = await client.send(
-      new ExecuteStatementCommand({
-        resourceArn: input.clusterArn,
-        secretArn: input.secretArn,
-        database: input.database,
-        sql,
-        parameters: [
-          { name: 'chatbotId', value: { stringValue: input.chatbotId } },
-          { name: 'companyId', value: { stringValue: input.companyId } },
-          { name: 'embedding', value: { stringValue: `[${input.embedding.join(',')}]` } },
-          { name: 'topK', value: { longValue: input.topK } },
-        ],
-      }),
-    )
+    rows = await input.query(sql, [
+      `[${input.embedding.join(',')}]`,
+      input.chatbotId,
+      input.companyId,
+      input.topK,
+    ])
   } catch (err) {
     throw new RetrievalError('db_error', `Retrieval query failed: ${(err as Error).message}`)
   }
 
-  const records = resp.records ?? []
+  const records = (Array.isArray(rows) ? rows : []) as RetrievalRow[]
   return records.map((rec) => {
-    const id = rec[0]?.stringValue
-    const content = rec[1]?.stringValue
-    const scoreField = rec[2]
-    const score =
-      scoreField?.stringValue !== undefined
-        ? Number(scoreField.stringValue)
-        : (scoreField?.doubleValue ?? 0)
-    if (id === undefined || content === undefined) {
+    const id = rec.id
+    const content = rec.content
+    const score = rec.score
+    if (id === undefined || id === null || content === undefined || content === null) {
       throw new RetrievalError('db_error', 'Retrieval row missing id/content columns')
     }
-    return { id, content, score }
+    return { id: String(id), content: String(content), score: Number(score ?? 0) }
   })
 }
