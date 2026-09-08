@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <title>chatSaaS — prueba de embed</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; color: #111; }
+      iframe { border: 1px solid #ccc; border-radius: 8px; width: 100%; height: 480px; }
+      code { background: #f4f4f5; padding: 2px 4px; border-radius: 4px; font-size: .85em; }
+    </style>
+  </head>
+  <body>
+    <h1>Prueba de embed — chatbot <code>56deb834…</code></h1>
+    <p>
+      Este iframe replica el snippet que entrega el board tras publicar.
+      En producción la base es <code>PUBLIC_CHAT_BASE_URL</code>; en sandbox
+      apunta a <code>http://localhost:3000/chat</code>.
+    </p>
+    <iframe
+      src="http://localhost:3000/chat/56deb834-56df-479d-9ff8-5ef6c003de0e"
+      title="chatSaaS chat"
+      loading="lazy"
+      sandbox="allow-scripts allow-same-origin"
+      referrerpolicy="strict-origin-when-cross-origin"
+      style="border: 0; width: 100%; height: 480px;"
+    ></iframe>
+    <p>Página del visitante directa: <a href="http://localhost:3000/chat/56deb834-56df-479d-9ff8-5ef6c003de0e">/chat/56deb834…</a></p>
+  </body>
+</html>

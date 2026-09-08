@@ -46,13 +46,25 @@ const handler = (req: IncomingMessage, res: ServerResponse) => {
     }
 
     if (modelId.startsWith('amazon.titan-embed')) {
-      let text = ''
+      // Mirror Titan v2's two request shapes: single {inputText} or the
+      // batched array of {inputText} — and answer with the matching response
+      // shape (single object vs array of objects), since
+      // ingest/embedBedrock.ts parses both.
+      let parsed: unknown
       try {
-        text = (JSON.parse(body) as { inputText?: string }).inputText ?? ''
+        parsed = JSON.parse(body)
       } catch {
-        /* fall through with empty text */
+        parsed = null
       }
-      return send(200, { embedding: embed(text), inputTextTokenCount: text.length })
+      const items = Array.isArray(parsed) ? parsed : [parsed]
+      const responses = items.map((item) => {
+        const text =
+          typeof (item as { inputText?: unknown })?.inputText === 'string'
+            ? (item as { inputText: string }).inputText
+            : ''
+        return { embedding: embed(text), inputTextTokenCount: text.length }
+      })
+      return send(200, Array.isArray(parsed) ? responses : responses[0])
     }
 
     if (modelId.includes('anthropic')) {
