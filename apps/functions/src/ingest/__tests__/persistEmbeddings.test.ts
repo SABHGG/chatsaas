@@ -1,13 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { mockClient } from 'aws-sdk-client-mock'
-import {
-  RDSDataClient,
-  ExecuteStatementCommand,
-} from '@aws-sdk/client-rds-data'
-import { persistChunks } from '../persistEmbeddings'
+import { describe, it, expect, vi } from 'vitest'
+import { persistChunks, type NeonQueryFn } from '../persistEmbeddings'
 import type { EmbeddingRow } from '../types'
-
-const rdsMock = mockClient(RDSDataClient)
 
 function makeRow(i: number): EmbeddingRow {
   return {
@@ -20,64 +13,73 @@ function makeRow(i: number): EmbeddingRow {
   }
 }
 
-beforeEach(() => {
-  rdsMock.reset()
-})
+function fakeQuery(returns: { id: string }[] = []): NeonQueryFn & { calls: { text: string; params: unknown[] }[] } {
+  const calls: { text: string; params: unknown[] }[] = []
+  const fn = vi.fn(async (text: string, params?: unknown[]) => {
+    calls.push({ text, params: params ?? [] })
+    return returns
+  }) as unknown as NeonQueryFn & { calls: { text: string; params: unknown[] }[] }
+  fn.calls = calls
+  return fn
+}
 
 describe('persistChunks', () => {
   it('returns 0 inserted when no rows are passed', async () => {
-    const out = await persistChunks(
-      {
-        clusterArn: 'arn:aws:rds:us-east-1:1:cluster:c',
-        secretArn: 'arn:aws:secretsmanager:us-east-1:1:secret:s',
-        database: 'chatsaas',
-        region: 'us-east-1',
-      },
-      [],
-    )
+    const query = fakeQuery()
+    const out = await persistChunks({ neonUrl: 'postgresql://neon/test' }, [], query)
     expect(out.insertedCount).toBe(0)
+    expect(query.calls).toHaveLength(0)
   })
 
-  it('inserts each row and reports the inserted count', async () => {
-    rdsMock.on(ExecuteStatementCommand).resolves({ numberOfRecordsUpdated: 1 })
-    const out = await persistChunks(
-      {
-        clusterArn: 'arn:aws:rds:us-east-1:1:cluster:c',
-        secretArn: 'arn:aws:secretsmanager:us-east-1:1:secret:s',
-        database: 'chatsaas',
-        region: 'us-east-1',
-      },
-      [makeRow(0), makeRow(1), makeRow(2)],
-    )
-    expect(out.insertedCount).toBe(3)
+  it('inserts rows with ON CONFLICT (chatbot_id, content_sha256) DO NOTHING', async () => {
+    const query = fakeQuery([{ id: 'id-0' }, { id: 'id-1' }])
+    const out = await persistChunks({ neonUrl: 'postgresql://neon/test' }, [makeRow(0), makeRow(1)], query)
+    expect(out.insertedCount).toBe(2)
+    expect(query.calls).toHaveLength(1)
+    const { text, params } = query.calls[0]
+    expect(text).toContain('ON CONFLICT (chatbot_id, content_sha256) DO NOTHING')
+    expect(text).toContain('RETURNING id')
+    expect(text).toContain('$1::uuid')
+    expect(text).toContain('$6::vector')
+    // One tuple per row: 6 bind params each.
+    expect(params).toHaveLength(12)
+    expect(params[0]).toBe('id-0')
+    expect(params[1]).toBe('chat-1')
+    expect(params[2]).toBe('company-acme')
+    expect(params[5]).toBe('[0.1,0.2,0.3]')
+  })
+
+  it('binds content_sha256 as a bytea hex literal', async () => {
+    const query = fakeQuery([{ id: 'id-0' }])
+    await persistChunks({ neonUrl: 'postgresql://neon/test' }, [makeRow(0)], query)
+    const { text, params } = query.calls[0]
+    expect(text).toContain('$5::bytea')
+    expect(params[4]).toBe(`\\x${'00'.repeat(32)}`)
   })
 
   it('reports 0 for rows skipped by ON CONFLICT DO NOTHING', async () => {
-    rdsMock.on(ExecuteStatementCommand).resolves({ numberOfRecordsUpdated: 0 })
-    const out = await persistChunks(
-      {
-        clusterArn: 'arn:aws:rds:us-east-1:1:cluster:c',
-        secretArn: 'arn:aws:secretsmanager:us-east-1:1:secret:s',
-        database: 'chatsaas',
-        region: 'us-east-1',
-      },
-      [makeRow(0)],
-    )
+    const query = fakeQuery([])
+    const out = await persistChunks({ neonUrl: 'postgresql://neon/test' }, [makeRow(0)], query)
     expect(out.insertedCount).toBe(0)
   })
 
-  it('propagates Data API errors', async () => {
-    rdsMock.on(ExecuteStatementCommand).rejects(new Error('Data API error'))
+  it('batches inserts above the per-statement row cap', async () => {
+    const query = fakeQuery([])
+    const rows = Array.from({ length: 1001 }, (_, i) => makeRow(i))
+    const out = await persistChunks({ neonUrl: 'postgresql://neon/test' }, rows, query)
+    expect(out.insertedCount).toBe(0)
+    // 500 + 500 + 1
+    expect(query.calls).toHaveLength(3)
+    expect(query.calls[0].params).toHaveLength(3000)
+    expect(query.calls[2].params).toHaveLength(6)
+  })
+
+  it('propagates driver errors', async () => {
+    const query = vi.fn(async () => {
+      throw new Error('Neon HTTP error')
+    }) as unknown as NeonQueryFn
     await expect(
-      persistChunks(
-        {
-          clusterArn: 'arn:aws:rds:us-east-1:1:cluster:c',
-          secretArn: 'arn:aws:secretsmanager:us-east-1:1:secret:s',
-          database: 'chatsaas',
-          region: 'us-east-1',
-        },
-        [makeRow(0)],
-      ),
-    ).rejects.toThrow(/Data API/)
+      persistChunks({ neonUrl: 'postgresql://neon/test' }, [makeRow(0)], query),
+    ).rejects.toThrow(/Neon HTTP/)
   })
 })

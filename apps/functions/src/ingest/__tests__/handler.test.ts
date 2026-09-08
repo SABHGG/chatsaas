@@ -18,9 +18,7 @@ const sqsMock = mockClient(SQSClient)
 const cfg: IngestHandlerConfig = {
   documentsBucket: 'docs',
   documentsTable: 'docs-tbl',
-  dbClusterArn: 'arn:aws:rds:us-east-1:1:cluster:c',
-  dbSecretArn: 'arn:aws:secretsmanager:us-east-1:1:secret:s',
-  dbName: 'chatsaas',
+  neonUrlParameterName: 'chatsaas-dev-neon-url',
   bedrockRegion: 'us-east-1',
   bedrockEmbedModelId: 'amazon.titan-embed-text-v2:0',
   ingestDlqUrl: 'https://sqs.us-east-1.amazonaws.com/1/dlq',
@@ -33,6 +31,7 @@ const splitText = vi.fn((content: string) => [
 ])
 const embedChunks = vi.fn(async () => [[0.1, 0.2, 0.3]])
 const persistChunks = vi.fn(async () => ({ insertedCount: 1 }))
+const resolveNeonUrl = vi.fn(async () => 'postgresql://neon/test-db?sslmode=require')
 const parsePdf = vi.fn(async () => ['hello world'])
 const parseDocx = vi.fn(async () => 'docx text')
 const parseText = vi.fn((buf: Buffer) => buf.toString('utf8'))
@@ -47,6 +46,7 @@ const deps: IngestHandlerDeps = {
   splitText,
   embedChunks,
   persistChunks,
+  resolveNeonUrl,
 }
 
 beforeEach(() => {
@@ -56,6 +56,7 @@ beforeEach(() => {
   splitText.mockClear()
   embedChunks.mockClear()
   persistChunks.mockClear()
+  resolveNeonUrl.mockClear()
   parsePdf.mockClear()
   parseDocx.mockClear()
   parseText.mockClear()
@@ -105,6 +106,10 @@ describe('ingest handler — happy path', () => {
     expect(splitText).toHaveBeenCalledOnce()
     expect(embedChunks).toHaveBeenCalledOnce()
     expect(persistChunks).toHaveBeenCalledOnce()
+    expect(persistChunks).toHaveBeenCalledWith(
+      { neonUrl: 'postgresql://neon/test-db?sslmode=require' },
+      expect.anything(),
+    )
     // We should have seen one transition to processing and one to ready.
     const updates = ddbMock.commandCalls(UpdateCommand)
     expect(updates.length).toBe(2)

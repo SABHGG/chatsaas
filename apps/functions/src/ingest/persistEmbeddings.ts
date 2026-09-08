@@ -1,76 +1,95 @@
-import {
-  RDSDataClient,
-  ExecuteStatementCommand,
-} from "@aws-sdk/client-rds-data";
+import { neon } from "@neondatabase/serverless";
 import type { EmbeddingRow } from "./types.js";
 
 /**
- * Inserts embedding rows into `public.embeddings` via the RDS Data API.
+ * Inserts embedding rows into `public.embeddings` on Neon via the
+ * `@neondatabase/serverless` HTTP driver (ADR-008: the pooled `-pooler`
+ * endpoint + fetch-based queries; no VPC, no RDS Data API).
  *
  * The unique index `(chatbot_id, content_sha256)` makes
  * `INSERT ... ON CONFLICT DO NOTHING` a no-op for already-embedded chunks.
  * A re-upload of the same content re-uses the existing rows.
  *
- * Returns `{ insertedCount }` from the Data API's `numberOfRecordsUpdated`
- * field (PostgreSQL `INSERT ... ON CONFLICT DO NOTHING ... RETURNING *`
- * reports the actual row inserts in `numberOfRecordsUpdated`).
+ * Returns `{ insertedCount }` counted from the `RETURNING id` rows
+ * (conflicted rows are skipped by Postgres and therefore not returned).
  */
+
+/** Executable query fn over a Neon connection (injectable for tests). */
+export type NeonQueryFn = (
+  text: string,
+  params?: unknown[],
+) => Promise<unknown[]>;
+
+/** Production driver: the fetch-based HTTP query function. */
+export function neonQueryFn(neonUrl: string): NeonQueryFn {
+  const db = neon(neonUrl);
+  return (text, params) => db.query(text, params as never[]);
+}
+
 export interface PersistOptions {
-  clusterArn: string;
-  secretArn: string;
-  database: string;
-  region: string;
+  /** Pooled (`-pooler`) Neon connection string. */
+  neonUrl: string;
+}
+
+/** PostgreSQL binds at most 65535 parameters per statement; keep headroom. */
+const MAX_ROWS_PER_INSERT = 500;
+
+const INSERT_SQL_PREFIX = `
+  INSERT INTO public.embeddings (id, chatbot_id, company_id, content, content_sha256, embedding)
+  VALUES
+`;
+const INSERT_SQL_SUFFIX = `
+  ON CONFLICT (chatbot_id, content_sha256) DO NOTHING
+  RETURNING id;
+`;
+
+function toByteaHex(bytes: Uint8Array): string {
+  return `\\x${Buffer.from(bytes).toString("hex")}`;
+}
+
+function toVectorLiteral(vector: number[]): string {
+  // pgvector expects the vector literal as a JSON-like array of floats.
+  return `[${vector.join(",")}]`;
 }
 
 export async function persistChunks(
   opts: PersistOptions,
   rows: EmbeddingRow[],
+  query: NeonQueryFn = neonQueryFn(opts.neonUrl),
 ): Promise<{ insertedCount: number }> {
   if (rows.length === 0) {
     return { insertedCount: 0 };
   }
-  const client = new RDSDataClient({ region: opts.region });
-  // We use one ExecuteStatement per row because the Data API does not
-  // natively support multi-row VALUES inserts with named parameters.
-  // For a 1000-chunk document, 1000 round-trips of ~5 ms each is 5 s
-  // total, well within the 5-minute Lambda timeout. A future WI may
-  // batch by writing to a single TEMP table via S3 COPY.
+
   let inserted = 0;
-  for (const row of rows) {
-    const sql = `
-      INSERT INTO public.embeddings (id, chatbot_id, company_id, content, content_sha256, embedding)
-      VALUES (:id::uuid, :chatbotId::uuid, :companyId::uuid, :content, :contentSha256, :embedding::vector)
-      ON CONFLICT (chatbot_id, content_sha256) DO NOTHING
-      RETURNING id;
-    `;
-    const resp = await client.send(
-      new ExecuteStatementCommand({
-        resourceArn: opts.clusterArn,
-        secretArn: opts.secretArn,
-        database: opts.database,
-        sql,
-        parameters: [
-          { name: "id", value: { stringValue: row.id } },
-          { name: "chatbotId", value: { stringValue: row.chatbotId } },
-          { name: "companyId", value: { stringValue: row.companyId } },
-          { name: "content", value: { stringValue: row.content } },
-          {
-            name: "contentSha256",
-            value: { blobValue: row.contentSha256 as unknown as Uint8Array },
-          },
-          {
-            name: "embedding",
-            // pgvector expects a JSON array of floats as text.
-            value: { stringValue: `[${row.embedding.join(",")}]` },
-          },
-        ],
-      }),
-    );
-    // numberOfRecordsUpdated is the number of rows actually inserted by
-    // the RETURNING clause. 0 means the ON CONFLICT branch was taken.
-    if ((resp.numberOfRecordsUpdated ?? 0) > 0) {
-      inserted += 1;
-    }
+  for (let offset = 0; offset < rows.length; offset += MAX_ROWS_PER_INSERT) {
+    const batch = rows.slice(offset, offset + MAX_ROWS_PER_INSERT);
+    const params: unknown[] = [];
+    const values = batch
+      .map((row) => {
+        const base = params.length;
+        params.push(
+          row.id,
+          row.chatbotId,
+          row.companyId,
+          row.content,
+          toByteaHex(row.contentSha256),
+          toVectorLiteral(row.embedding),
+        );
+        const placeholders = [1, 2, 3, 4, 5, 6]
+          .map((i) => `$${base + i}${i === 5 ? "::bytea" : i === 6 ? "::vector" : i <= 3 ? "::uuid" : ""}`)
+          .join(", ");
+        return `(${placeholders})`;
+      })
+      .join(", ");
+
+    const result = (await query(
+      `${INSERT_SQL_PREFIX} ${values} ${INSERT_SQL_SUFFIX}`,
+      params,
+    )) as { id: string }[];
+    // Rows skipped by ON CONFLICT DO NOTHING are not RETURNING-ed, so the
+    // result length is the number of rows actually inserted.
+    inserted += result.length;
   }
   return { insertedCount: inserted };
 }

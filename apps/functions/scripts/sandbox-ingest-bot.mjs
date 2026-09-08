@@ -7,8 +7,10 @@
  * `uploaded` forever. Where `scripts/sandbox-ingest.mjs` re-ingests a single
  * document by id, this variant sweeps the documents table for EVERY document
  * with status `uploaded` (optionally narrowed to one chatbot) and runs the
- * REAL ingest handler against the local stack: floci DynamoDB + S3, the
- * deterministic Bedrock mock and floci rds-data pgvector.
+ * REAL ingest handler against the local stack: floci DynamoDB + S3 and the
+ * deterministic Bedrock mock. Persistence goes to the real Neon dev project
+ * (floci cannot emulate Neon): the handler resolves the Neon URL from
+ * NEON_DATABASE_URL when set, otherwise from SSM.
  *
  * Usage (from apps/functions):
  *   pnpm exec tsx --env-file-if-exists=.env scripts/sandbox-ingest-bot.mjs [chatbotId]
@@ -36,6 +38,11 @@ try {
 } catch {
   // No .env: rely on the exported environment (e.g. `eval $(floci env)`).
 }
+
+// The ingest handler reads the Neon URL via SSM in production. The sandbox
+// uses the direct NEON_DATABASE_URL override (see src/ingest/neonUrl.ts) and
+// only needs the parameter *name* configured.
+process.env.NEON_URL_PARAMETER_NAME ??= "chatsaas-dev-neon-url";
 
 const chatbotId = process.argv[2] ?? null;
 if (process.argv.length > 3) {

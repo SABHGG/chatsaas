@@ -6,8 +6,9 @@
  * not wire that event pipeline, so documents uploaded through the API stay
  * `uploaded` forever. This script builds the exact same S3 event for one
  * document (by id) and runs the REAL ingest handler against the local stack:
- * floci DynamoDB + S3, the deterministic Bedrock mock and floci rds-data
- * pgvector.
+ * floci DynamoDB + S3 and the deterministic Bedrock mock. Persistence goes to
+ * the real Neon dev project (floci cannot emulate Neon): the handler resolves
+ * the Neon URL from NEON_DATABASE_URL when set, otherwise from SSM.
  *
  * Usage (from anywhere):
  *   pnpm dev:ingest-doc <documentId>
@@ -34,6 +35,11 @@ try {
 } catch {
   // No .env: rely on the exported environment (e.g. `eval $(floci env)`).
 }
+
+// The ingest handler reads the Neon URL via SSM in production. The sandbox
+// uses the direct NEON_DATABASE_URL override (see src/ingest/neonUrl.ts) and
+// only needs the parameter *name* configured.
+process.env.NEON_URL_PARAMETER_NAME ??= "chatsaas-dev-neon-url";
 
 const documentId = process.argv[2];
 if (!documentId) {

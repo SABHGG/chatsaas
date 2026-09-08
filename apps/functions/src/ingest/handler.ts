@@ -12,6 +12,7 @@ import { logger } from "./logger.js";
 import { splitText } from "./splitter.js";
 import { embedChunks } from "./embedBedrock.js";
 import { persistChunks } from "./persistEmbeddings.js";
+import { resolveNeonUrl } from "./neonUrl.js";
 import { parsePdf } from "./parsePdf.js";
 import { parseDocx } from "./parseDocx.js";
 import { parseText } from "./parseText.js";
@@ -36,7 +37,8 @@ import type {
  *   6. Pick the parser by mime type.
  *   7. Split into chunks.
  *   8. Embed via Bedrock Titan v2.
- *   9. Persist via RDS Data API with ON CONFLICT DO NOTHING.
+ *   9. Resolve the Neon URL (SSM SecureString) and persist via the Neon HTTP
+ *      driver with ON CONFLICT DO NOTHING.
  *  10. Update the row to `ready` with metadata.
  *  11. On terminal failure: update to `failed`, push to DLQ, write a marker file.
  */
@@ -44,9 +46,8 @@ import type {
 export interface IngestHandlerConfig {
   documentsBucket: string
   documentsTable: string
-  dbClusterArn: string
-  dbSecretArn: string
-  dbName: string
+  /** SSM SecureString parameter holding the pooled Neon connection string. */
+  neonUrlParameterName: string
   bedrockRegion: string
   bedrockEmbedModelId: string
   ingestDlqUrl?: string
@@ -64,6 +65,7 @@ export interface IngestHandlerDeps {
   splitText: typeof splitText
   embedChunks: typeof embedChunks
   persistChunks: typeof persistChunks
+  resolveNeonUrl: typeof resolveNeonUrl
 }
 
 function readEnvConfig(): IngestHandlerConfig {
@@ -77,9 +79,7 @@ function readEnvConfig(): IngestHandlerConfig {
   return {
     documentsBucket: required("DOCUMENTS_BUCKET"),
     documentsTable: required("DOCUMENTS_TABLE"),
-    dbClusterArn: required("DB_CLUSTER_ARN"),
-    dbSecretArn: required("DB_SECRET_ARN"),
-    dbName: required("DB_NAME"),
+    neonUrlParameterName: required("NEON_URL_PARAMETER_NAME"),
     bedrockRegion: required("BEDROCK_REGION"),
     bedrockEmbedModelId: required("BEDROCK_EMBED_MODEL_ID"),
     ingestDlqUrl: process.env.INGEST_DLQ_URL,
@@ -100,6 +100,7 @@ const defaultDeps = (): IngestHandlerDeps => ({
   splitText,
   embedChunks,
   persistChunks,
+  resolveNeonUrl,
 })
 
 /**
@@ -183,15 +184,8 @@ async function processRecord(
       contentSha256: c.contentSha256,
       embedding: vectors[i],
     }))
-    const { insertedCount } = await deps.persistChunks(
-      {
-        clusterArn: config.dbClusterArn,
-        secretArn: config.dbSecretArn,
-        database: config.dbName,
-        region: config.bedrockRegion,
-      },
-      rows,
-    )
+    const neonUrl = await deps.resolveNeonUrl(config.neonUrlParameterName)
+    const { insertedCount } = await deps.persistChunks({ neonUrl }, rows)
     const totalLatencyMs = Date.now() - t0
     const topSha = chunks.length > 0 ? toHex(chunks[0].contentSha256) : ""
     await markReady(deps, config.documentsTable, documentId, {
