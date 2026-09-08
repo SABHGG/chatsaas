@@ -7,7 +7,6 @@ import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { SQSClient, SendMessageCommand } from "@aws-sdk/client-sqs";
 import { Buffer } from "node:buffer";
-import { randomUUID } from "node:crypto";
 import { logger } from "./logger.js";
 import { splitText } from "./splitter.js";
 import { embedChunks } from "./embedBedrock.js";
@@ -177,7 +176,6 @@ async function processRecord(
       region: config.bedrockRegion,
     })
     const rows: EmbeddingRow[] = chunks.map((c, i) => ({
-      id: randomUUID(),
       chatbotId: doc.chatbotId,
       companyId: doc.companyId,
       content: c.content,

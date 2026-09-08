@@ -26,9 +26,13 @@ if (!url) {
 }
 
 const sql = readFileSync(file, "utf-8");
+// Strip full-line comments BEFORE splitting on ';': a semicolon inside a
+// comment (e.g. "preinstalled; this is a no-op") would otherwise split a
+// comment in half and send its tail to Postgres as a bare statement.
 const statements = sql
+  .replace(/^\s*--.*$/gm, "")
   .split(";")
-  .map((s) => s.replace(/^\s*--.*$/gm, "").trim())
+  .map((s) => s.trim())
   .filter(Boolean);
 
 console.log(`Applying ${file} (${statements.length} statements)…`);

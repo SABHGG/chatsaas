@@ -65,9 +65,8 @@ export interface Chunk {
   contentSha256: Uint8Array;
 }
 
-/** One row to insert into public.embeddings. */
+/** One row to insert into public.embeddings (id is DB-generated). */
 export interface EmbeddingRow {
-  id: string;
   chatbotId: string;
   companyId: string;
   content: string;

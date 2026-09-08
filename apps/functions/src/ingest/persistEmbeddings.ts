@@ -35,7 +35,7 @@ export interface PersistOptions {
 const MAX_ROWS_PER_INSERT = 500;
 
 const INSERT_SQL_PREFIX = `
-  INSERT INTO public.embeddings (id, chatbot_id, company_id, content, content_sha256, embedding)
+  INSERT INTO public.embeddings (chatbot_id, company_id, content, content_sha256, embedding)
   VALUES
 `;
 const INSERT_SQL_SUFFIX = `
@@ -69,15 +69,15 @@ export async function persistChunks(
       .map((row) => {
         const base = params.length;
         params.push(
-          row.id,
           row.chatbotId,
           row.companyId,
           row.content,
           toByteaHex(row.contentSha256),
           toVectorLiteral(row.embedding),
         );
-        const placeholders = [1, 2, 3, 4, 5, 6]
-          .map((i) => `$${base + i}${i === 5 ? "::bytea" : i === 6 ? "::vector" : i <= 3 ? "::uuid" : ""}`)
+        // Per tuple: $1::uuid, $2::uuid, $3 text, $4::bytea, $5::vector.
+        const placeholders = [1, 2, 3, 4, 5]
+          .map((i) => `$${base + i}${i === 4 ? "::bytea" : i === 5 ? "::vector" : i <= 2 ? "::uuid" : ""}`)
           .join(", ");
         return `(${placeholders})`;
       })
