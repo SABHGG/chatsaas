@@ -1,14 +1,13 @@
 # chatSaaS — Deployment Guide
 
-> **STALE (2026-09-05):** This guide documents the pre-ADR-008 Aurora data plane
-> (Aurora Serverless v2, RDS Proxy, Secrets Manager rotation, VPC). ADR-008
-> replaces Aurora with Neon (serverless Postgres + pgvector, non-VPC Lambdas,
-> SSM SecureString). It must be re-scoped to the Neon path during WI-004
-> implementation. Do not follow the Aurora/RDS Proxy sections.
+> **Current (2026-09-08):** rewritten for the ADR-008 Neon data plane. The
+> Aurora Serverless v2 / RDS Proxy / Secrets Manager / VPC content of the
+> pre-2026-09-05 guide was removed — that path no longer exists in the code.
 
-A step-by-step guide to deploy chatSaaS to AWS. It covers prerequisites, every
-environment variable, the CDK bootstrap/deploy, collecting stack outputs, Bedrock
-model access, and post-deploy verification.
+A step-by-step guide to deploy chatSaaS to AWS. It covers prerequisites, the
+Neon project setup, every environment variable, the CDK bootstrap/deploy,
+collecting stack outputs, and post-deploy verification. A separate section (§9)
+documents the local sandbox (floci) used for development.
 
 ---
 
@@ -19,23 +18,27 @@ chatSaaS is a pnpm monorepo with three deployable surfaces:
 | Surface | Tech | Deployed by |
 | --- | --- | --- |
 | `infra/` | AWS CDK v2 (TypeScript) | `cdk deploy` |
-| `apps/functions/` | Fastify 5 (Node 24) → Lambda container image | **Not yet wired into CDK** — see §8 |
+| `apps/functions/` | Fastify 5 (Node 24) | Ingest Lambda is in CDK; **the public chat API is not yet** — see §8 |
 | `apps/web/` | Next.js 16 / React 19 | **Not yet wired into CDK** — see §8 |
 
-**What the CDK stack currently provisions** (single `ChatSaaSStack`):
+**What the CDK stack (`ChatSaaSStack`) provisions today:**
 
-- Aurora Serverless v2 cluster with `pgvector`
-- RDS Proxy (skipped by default — see §6.3)
-- Secrets Manager database secret + 7-day rotation hook
-- Cognito User Pool + App Client + Domain (identity)
-- S3 documents bucket
-- DynamoDB tables: `companies` + `documents`
-- Ingest Lambda + EventBridge rule + DLQ
-- Custom resources: `public.embeddings` table, embeddings unique index
+| Concern | Resource |
+| --- | --- |
+| Vector store | **External Neon project** (serverless Postgres + pgvector, us-east-1) — schema applied by `infra/db/migrations/`, NOT by CDK |
+| Connection | `@neondatabase/serverless` HTTP driver, pooled endpoint, URL read at runtime from SSM SecureString `chatsaas-{env}-neon-url` |
+| Identity | Cognito User Pool + App Client + Domain (WI-008) |
+| Documents | S3 bucket + DynamoDB `documents` table (WI-005) |
+| Ingest | Lambda (no VPC) + EventBridge rule on `s3:ObjectCreated:Put` + SQS DLQ |
+| Companies | DynamoDB `companies` table (WI-008) |
 
-The RAG chat API (`apps/functions`) and the Next.js frontend (`apps/web`) are
-sibling workspaces under active development (WI-006/WI-008); their production
-hosting is **not yet part of this stack** and is documented honestly in §8.
+There is **no Aurora, no RDS Proxy, no Secrets Manager, no VPC** in the stack:
+Lambdas run outside any VPC and reach Neon / AWS services over TLS.
+
+Stack outputs: `NeonUrlParameterName`, `EmbeddingsTableName`,
+`DocumentsBucketName`, `DocumentsTableName`, `IngestLambdaName`,
+`IngestDlqUrl`, plus the Cognito outputs (`UserPoolId`, `UserPoolClientId`,
+`UserPoolDomain`, `IssuerUrl`).
 
 ---
 
@@ -47,235 +50,162 @@ hosting is **not yet part of this stack** and is documented honestly in §8.
 | --- | --- | --- |
 | Node.js | `>=24.0.0` | `node -v` |
 | pnpm | `>=11.0.0` (pin: `11.22.0`) | `pnpm -v` |
-| AWS CDK CLI | `2.266.0`+ (installed via repo devDependency) | `pnpm -F @chatsaas/infra cdk --version` |
-
-Install pnpm via corepack:
+| AWS CDK CLI | via repo devDependency | `pnpm -F @chatsaas/infra cdk --version` |
 
 ```bash
 corepack enable
 corepack prepare pnpm@11.22.0 --activate
-```
-
-Install dependencies:
-
-```bash
 pnpm install
 ```
 
 ### 2.2 AWS account
 
-- An AWS account with programmatic access (IAM user with `AdministratorAccess`
-  or equivalent for bootstrapping, narrowed later).
-- AWS CLI configured (`aws configure`), or the standard `AWS_ACCESS_KEY_ID` /
-  `AWS_SECRET_ACCESS_KEY` / `AWS_SESSION_TOKEN` environment variables exported.
+- Programmatic access (IAM user or role) with permissions to deploy CloudFormation,
+  Cognito, S3, DynamoDB, Lambda, EventBridge, SQS, SSM.
+- Credentials configured (`aws configure` or `AWS_*` env vars).
+- **No default VPC requirement** — the stack does not create or look up VPCs.
 
-### 2.3 AWS services to enable **manually**
+### 2.3 Neon project (manual, external)
 
-These are NOT provisioned by CDK and must be enabled before the first request:
+The database is external to AWS (ADR-008). Per environment:
 
-- **Amazon Bedrock model access** — enable both models in the target region:
-  - `anthropic.claude-3-5-sonnet-*`
-  - `amazon.titan-embed-text-v2:0`
+1. Create a Neon project in `us-east-1` (free plan is fine for dev).
+2. Copy the **pooled** connection string (hostname contains `-pooler`).
+3. Apply the embeddings schema once per branch (§5).
+4. Store the URL in SSM (§6).
 
-  Path: AWS Console → Amazon Bedrock → Model access → request access. Approval
-  is per-region and not instantaneous.
+Free-plan caveats: autosuspend after ~5 min idle (first query pays a wake-up);
+0.5 GB storage cap on the dev project.
 
-- **A default VPC** in the target region. The stack uses `Vpc.fromLookup` on the
-  default VPC unless you pass VPC context (§6.1). If the default VPC was
-  deleted, provide explicit VPC context.
+### 2.4 AWS services to enable manually
+
+- **Amazon Bedrock model access** (Console → Bedrock → Model access):
+  - `amazon.titan-embed-text-v2:0` (ingest + query embeddings)
+  - `anthropic.claude-3-5-sonnet-*` (chat completions)
+
+  Approval is per-region and not instantaneous.
 
 ---
 
 ## 3. Environment variables
 
-Each workspace documents its variables in an `.env.example`. **Only `.env.example`
-files are committed; real `.env` files are gitignored.**
+Only `.env.example` files are committed; real `.env` files are gitignored.
 
-### 3.1 Root (`/.env.example`) — reference only
+### 3.1 Infra (`infra/.env` — optional)
 
-The root `.env.example` is documentation; it does not power any script. It points
-to the per-workspace files below.
+`CDK_DEFAULT_ACCOUNT` / `CDK_DEFAULT_REGION` drive the stack env. Resource
+naming and policies come from CDK context (`-c envName=...`, §6).
 
-### 3.2 Infrastructure (`infra/.env.example`)
+### 3.2 Functions (`apps/functions/.env.example`)
 
-Copy to `infra/.env` and fill in:
+What the CDK stack sets on the **ingest Lambda** at deploy time:
 
-```bash
-# AWS Account and Region
-CDK_DEFAULT_ACCOUNT=123456789012
-CDK_DEFAULT_REGION=us-east-1
+| Variable | Value |
+| --- | --- |
+| `DOCUMENTS_BUCKET`, `DOCUMENTS_TABLE` | wired by `IngestLambdaConstruct` |
+| `NEON_URL_PARAMETER_NAME` | `chatsaas-{env}-neon-url` |
+| `BEDROCK_EMBED_MODEL_ID`, `BEDROCK_REGION` | pinned in the construct |
 
-# Stack Configuration
-STACK_PREFIX=chatsaas
-ENVIRONMENT=dev
-
-# Cognito Configuration
-COGNITO_ALLOW_SELF_SIGNUP=true
-COGNITO_PASSWORD_POLICY_MIN_LENGTH=8
-
-# Domain Configuration (optional)
-# DOMAIN_NAME=app.chatsaas.com
-# HOSTED_ZONE_ID=Z1234567890ABC
-```
-
-> `CDK_DEFAULT_ACCOUNT` and `CDK_DEFAULT_REGION` are read directly by
-> `infra/app.ts` to set the stack `env`. `CDK_DEFAULT_REGION` also seeds the
-> Cognito construct region (default `us-east-1`).
-
-> The CDK stack does **not** read `STACK_PREFIX`, `ENVIRONMENT`,
-> `COGNITO_*`, or `DOMAIN_*` from `infra/.env` today — those keys are
-> forward-looking placeholders. Environment selection is driven by context
-> (`-c envName=...`, §6). The real Cognito policy is compiled in
-> `infra/lib/cognito-user-pool.ts` (password policy, self-signup, groups).
-
-### 3.3 Functions API (`apps/functions/.env.example`)
-
-These are set by the CDK stack for the ingest/rotation Lambdas at deploy time and
-documented for reference. The RAG chat route (WI-006) additionally needs:
+What the **API/chat surface** needs (set by the deploy once WI-011 lands; for
+the sandbox server they live in `.env`):
 
 | Variable | Purpose |
 | --- | --- |
-| `CHATBOTS_TABLE_NAME`, `CONVERSATIONS_TABLE_NAME`, `MESSAGES_TABLE_NAME` | Chat persistence (WI-006) |
-| `SUBSCRIPTIONS_TABLE_NAME`, `CREDITS_TABLE_NAME` | Metering / prepaid credits |
-| `RDS_CLUSTER_ARN`, `RDS_SECRET_ARN`, `RDS_DATABASE` | Aurora pgvector via RDS Data API |
-| `BEDROCK_EMBED_MODEL_ID` | `amazon.titan-embed-text-v2:0` |
-| `CHAT_MODEL_ID` | `anthropic.claude-3-5-sonnet-*` |
-| `CHAT_TOP_K`, `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURE`, `CHAT_CONTEXT_TURNS` | Completion params (sensible defaults exist) |
+| `CHATBOTS_TABLE_NAME`, `CONVERSATIONS_TABLE_NAME`, `MESSAGES_TABLE_NAME` | chat persistence |
+| `SUBSCRIPTIONS_TABLE_NAME`, `CREDITS_TABLE_NAME` | metering gates (`wi006-*`) |
+| `NEON_URL_PARAMETER_NAME` | SSM parameter holding the Neon pooled URL |
+| `NEON_DATABASE_URL` | direct override (sandbox only; production resolves via SSM) |
+| `BEDROCK_EMBED_MODEL_ID`, `CHAT_MODEL_ID` | `amazon.titan-embed-text-v2:0`, `anthropic.claude-3-5-sonnet-*` |
+| `PUBLIC_CHAT_BASE_URL` | base URL stamped into the published `iframe_src` (default `https://chat.chatsaas.local`) |
+| `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | JWT verification on authenticated routes |
+| `CHAT_TOP_K`, `CHAT_MAX_TOKENS`, `CHAT_TEMPERATURE`, `CHAT_CONTEXT_TURNS` | completion params (defaults exist) |
 | `CHAT_SYSTEM_PROMPT_DEFAULT`, `CHAT_FALLBACK_ANSWER` | RAG prompt defaults |
-| `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID` | JWT verification |
 
-The Fastify server degrades gracefully: routes whose env vars are missing are not
-mounted (a warning is logged at boot). See `apps/functions/README.md` for the
-full table and the Warm-Up runbook.
+The server degrades gracefully: routes whose env vars are missing are not
+mounted (a warning is logged at boot).
 
-### 3.4 Web frontend (`apps/web/.env.local.example`)
+> **Never** `source` the real `.env` in shell — the Neon URL contains `&`.
+> Scripts read it via `node --env-file-if-exists=.env` or the loaders do.
 
-Copy to `apps/web/.env.local` for local dev. For production these are build/runtime
-environment variables (all `NEXT_PUBLIC_*` are inlined at build time):
+### 3.3 Web (`apps/web/.env.local.example`)
 
 ```bash
-# AWS
-AWS_REGION=us-east-1
-AWS_ACCOUNT_ID=123456789012
-
-# Cognito — obtained from CDK stack outputs (§7)
 NEXT_PUBLIC_COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
-NEXT_PUBLIC_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
+NEXT_PUBLIC_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxx
 NEXT_PUBLIC_COGNITO_REGION=us-east-1
-NEXT_PUBLIC_COGNITO_DOMAIN=chatsaas-dev.auth.us-east-1.amazoncognito.com
-# Optional — only for a confidential app client (secret enabled)
-COGNITO_CLIENT_SECRET=
-
-# API
+NEXT_PUBLIC_COGNITO_DOMAIN=<pool>.auth.us-east-1.amazoncognito.com
 NEXT_PUBLIC_API_URL=https://<api-host>/api
-
-# Environment
 NODE_ENV=production
 ```
 
-The issuer and JWKS URL are derived from `NEXT_PUBLIC_COGNITO_REGION` and
-`NEXT_PUBLIC_COGNITO_USER_POOL_ID`; `NEXT_PUBLIC_COGNITO_ISSUER_URL` can override
-the derivation if needed (see `apps/web/src/lib/jwt.ts`).
+Issuer/JWKS are derived from region + pool id. The OAuth redirect URI is
+derived from the request origin (`${origin}/api/auth/callback`), so the app
+must be reached at the same origin it is registered under.
 
 ---
 
-## 4. Local sanity check (optional, before AWS)
+## 4. Apply the Neon schema (once per environment/branch)
+
+`cdk deploy` does NOT create the embeddings schema — a migration script does:
 
 ```bash
-# Typecheck + unit tests across the monorepo
-pnpm type-check
-pnpm test
-
-# Synthesize the CDK template without AWS access (uses cdk.context.json)
-pnpm -F @chatsaas/infra synth
+# Prereq: NEON_DATABASE_URL in apps/functions/.env (pooled endpoint)
+pnpm --filter @chatsaas/functions exec node --env-file-if-exists=.env \
+  scripts/run-neon-migration.mjs
 ```
 
-The repo ships `infra/cdk.context.json` with mock VPC values and `skipProxy: true`
-precisely so `cdk synth` and `vitest` run without AWS credentials.
+Executes `infra/db/migrations/001-embeddings-pgvector.sql` via the Neon HTTP
+driver and verifies: `vector` extension, `public.embeddings` table, the
+`chatbot+company` btree index, the unique `(chatbot_id, content_sha256)` index
+(content-level dedupe), and the HNSW cosine index. All statements are
+idempotent. New migrations: `infra/db/migrations/NNN-<slug>.sql`.
 
----
+## 5. Store the Neon URL in SSM (pending manual)
 
-## 5. CDK bootstrap (once per account/region)
+The Lambdas fetch the URL at runtime with `ssm:GetParameter`. Create the
+SecureString once per environment:
 
 ```bash
-pnpm -F @chatsaas/infra cdk bootstrap aws://<ACCOUNT_ID>/<REGION>
+aws ssm put-parameter \
+  --name "chatsaas-dev-neon-url" \
+  --type "SecureString" \
+  --value "postgresql://<user>:<password>@<pooler-endpoint>/neondb?sslmode=require&channel_binding=require" \
+  --region us-east-1
 ```
 
-Example:
-
-```bash
-pnpm -F @chatsaas/infra cdk bootstrap aws://123456789012/us-east-1
-```
-
-This creates the CDK toolkit stack (S3 staging bucket + IAM roles) the deploy
-depends on.
+- Always the **pooled** endpoint. AWS-managed key (`aws/ssm`) needs no extra
+  KMS grant; the Lambda role is granted `ssm:GetParameter` on that parameter
+  only.
+- Rotation: change the Neon role password, then `put-parameter --overwrite`.
+- **Status: not yet created** against a real AWS account (WI-004 pending
+  manual). Required before any deployed Lambda can reach Neon.
 
 ---
 
 ## 6. Deploy the stack
 
-### 6.1 VPC selection
-
-The stack resolves its VPC two ways (`infra/lib/vpc.ts`):
-
-1. **Default** (no context): `Vpc.fromLookup` on the account's **default VPC**.
-   Requires AWS credentials + an existing default VPC.
-2. **Explicit** via context (flat keys):
-
-   ```bash
-   -c vpcId=vpc-0abc123 -c privateSubnetIds=subnet-1,subnet-2 \
-   -c availabilityZones=us-east-1a,us-east-1b
-   ```
-
-### 6.2 Environment (`envName`)
-
-`envName` defaults to `dev` and is passed to every construct (resource naming,
-RemovalPolicy, deletion protection). Set it per environment:
-
 ```bash
--c envName=dev     # destroy-on-delete, no deletion protection
--c envName=prod    # RETAIN, PITR, deletion protection
-```
+# One-time per account/region
+pnpm -F @chatsaas/infra cdk bootstrap aws://<ACCOUNT_ID>/<REGION>
 
-> For `prod`, `CognitoUserPoolConstruct` **throws** unless `adminAllowlist` is
-> non-empty (`infra/lib/cognito-user-pool.ts`). The allowlist is currently
-> hard-coded in `chat-saas-stack.ts` as `[]` — a prod deploy today requires
-> wiring a real allowlist first. Treat the stack as **dev-safe**; production
-> identity is not yet fully configured (see §8).
-
-### 6.3 RDS Proxy (`skipProxy`)
-
-RDS Proxy is skipped by default because of a CDK 2.266.0 limitation
-(`ServerlessCluster.engine` is not exposed, so `ProxyTarget.bind` throws at
-synth). The MVP uses direct RDS Data API for Lambdas.
-
-```bash
--c skipProxy=true   # default via cdk.context.json — proxy omitted
-```
-
-Do not set `skipProxy=false` on the current CDK version; it will fail at synth.
-
-### 6.4 Review + deploy
-
-```bash
-# Preview the changes (does not deploy)
-pnpm -F @chatsaas/infra cdk diff -c envName=dev
-
-# Deploy
+# Preview + deploy
+pnpm -F @chatsaas/infra cdk diff   -c envName=dev
 pnpm -F @chatsaas/infra cdk deploy -c envName=dev
 ```
 
-The deploy is long (Aurora Serverless v2 + custom resources can take 20–40
-minutes on first run).
+- `-c envName=dev` — destroy-on-delete resources.
+- `-c envName=prod` — RETAIN / deletion protection; the Cognito construct
+  **throws** unless an admin allowlist is wired. Today `adminAllowlist` is
+  hard-coded `[]` in `chat-saas-stack.ts`: treat the stack as **dev-safe**
+  until that is parameterized.
 
----
+The deploy is quick compared to the Aurora era (no cluster, no custom
+resources for the DB schema) — Cognito + S3 + DDB + Lambda, minutes not hours.
 
-## 7. Collect the stack outputs
-
-After deploy, capture the outputs and feed them into the web/functions env:
+### 7. Collect stack outputs
 
 ```bash
-pnpm -F @chatsaas/infra cdk list --show-values  # or `cdk deploy --outputs-file out.json`
+pnpm -F @chatsaas/infra cdk deploy --outputs-file out.json -c envName=dev
 ```
 
 | Output | Feeds into |
@@ -284,84 +214,103 @@ pnpm -F @chatsaas/infra cdk list --show-values  # or `cdk deploy --outputs-file 
 | `UserPoolClientId` | `NEXT_PUBLIC_COGNITO_CLIENT_ID`, `COGNITO_CLIENT_ID` |
 | `UserPoolDomain` | `NEXT_PUBLIC_COGNITO_DOMAIN` |
 | `IssuerUrl` | `NEXT_PUBLIC_COGNITO_ISSUER_URL` (optional override) |
-| `ClusterEndpoint` / `ClusterArn` | `RDS_CLUSTER_ARN` (functions) |
-| `SecretArn` | `RDS_SECRET_ARN` (functions) |
-| `DatabaseName` | `RDS_DATABASE` (functions) |
-| `DocumentsBucketName` | ingest env |
-| `DocumentsTableName` | ingest / functions `DOCUMENTS_TABLE_NAME` |
+| `NeonUrlParameterName` | `NEON_URL_PARAMETER_NAME` (functions) |
+| `EmbeddingsTableName` | reference only (`public.embeddings`) |
+| `DocumentsBucketName` | ingest env / runbook |
+| `DocumentsTableName` | `DOCUMENTS_TABLE` (ingest), functions docs routes |
 | `IngestLambdaName`, `IngestDlqUrl` | ops / runbook |
-| `ProxyEndpoint`, `ProxyArn` | present only when proxy is **not** skipped |
 
 ---
 
 ## 8. What is NOT yet deployable (known gaps)
 
-Be honest with yourself before treating this as "the app is fully deployed":
+Be honest before calling the app "deployed":
 
-1. **API service (`apps/functions`)** — the Fastify RAG API is not in the CDK
-   stack. It ships as a Lambda container image per its README, but there is no
-   `DockerImageFunction`/API Gateway construct for it yet, and no
-   `CHATBOTS_TABLE_NAME`/`CONVERSATIONS_TABLE_NAME`/etc. tables are created by CDK.
-   Deploying it is future work (WI-006).
+1. **Public chat API** — the routes
+   `/api/public/chat/:id/message`, `/api/public/chatbots/:id/config|iframe`,
+   and the metered chat pipeline (`chatPublicMessage`) exist only in the local
+   sandbox server. No CDK construct deploys them: tracked as draft
+   **WI-011** (`knowledge/delivery/work-items/draft/WI-011-public-chat-infra.md`).
+2. **Frontend hosting** — Next.js is not wired to CDK (no Amplify/CloudFront
+   construct). `pnpm build` / `pnpm start` work; hosting is not in IaC.
+3. **Production identity** — Cognito `callbackUrls.prod`, `signOutUrls.prod`,
+   and `adminAllowlist` are empty in the stack.
+4. **Metering tables** — `wi006-subscriptions` / `wi006-credits` gate the chat
+   (`checkLimits` reads `id = companyId`) and are created outside CDK today
+   (open question Q-WI011-2).
+5. **Custom domain** — `DOMAIN_NAME`/`HOSTED_ZONE_ID` remain placeholders; the
+   published `iframe_src` stamps `PUBLIC_CHAT_BASE_URL`.
 
-2. **Frontend hosting (`apps/web`)** — Next.js is not wired to CDK (no Amplify/
-   CloudFront/S3 static site construct). It builds with `pnpm build` and runs with
-   `pnpm start`, but production hosting is not yet in IaC.
-
-3. **Production identity** — Cognito `callbackUrls.prod`, `signOutUrls.prod`, and
-   `adminAllowlist` are empty/`[]` in the stack. A real prod OAuth flow needs those
-   wired.
-
-4. **Custom domain** — `DOMAIN_NAME` / `HOSTED_ZONE_ID` exist as placeholders in
-   `infra/.env.example` but no Route53/ACM/CloudFront code consumes them yet.
-
-**Net result today**: `cdk deploy` stands up the *data plane + identity* (Aurora,
-pgvector, secrets, Cognito, ingest pipeline). The *application plane* (API + web)
-is still developed locally / in sandbox and is not production-deployable from this
-repo without further work.
+**Net result**: `cdk deploy` stands up the **data plane + identity** (Neon
+connection config, Cognito, documents store, ingest pipeline). The
+application plane (public chat API + web) is sandbox-only until WI-011.
 
 ---
 
-## 9. Post-deploy verification
+## 9. Local sandbox (development, no AWS)
 
-### 9.1 Verify infrastructure
+The dev loop runs fully local against emulated AWS + real Neon:
 
-```bash
-# Stack resources are healthy
-pnpm -F @chatsaas/infra cdk describe-stacks 2>/dev/null || \
-  aws cloudformation describe-stacks --stack-name ChatSaaSStack
-```
+| Service | What | Start |
+| --- | --- | --- |
+| floci | AWS emulator (Docker): DynamoDB, S3, Cognito stubs | `floci up` (desktop app required) |
+| Sandbox API :3001 | full Fastify API on floci data | `pnpm -F @chatsaas/functions dev:api` |
+| Sandbox web :3000 | Next dev (BFF on `/api/*`) | `pnpm dev:sandbox` |
+| Fake Cognito IdP :4568 | HTTPS OAuth2 IdP fixture (auth-code + PKCE) | `pnpm exec tsx apps/web/e2e/fixtures/fake-cognito.mts` |
+| Mock Bedrock :4567 | deterministic Titan/Claude responses | `pnpm exec tsx scripts/mock-bedrock.ts` |
+| Ingest bot | runs the REAL ingest handler for every `uploaded` doc | `pnpm exec tsx --env-file-if-exists=.env scripts/sandbox-ingest-bot.mjs [chatbotId]` |
+| Plans seed | idempotent plan-1/plan-2 seeding (wizard review) | `node scripts/sandbox-seed-plans.mjs` |
 
-### 9.2 Verify the ingest pipeline
+Gotchas learned the hard way (all verified):
 
-1. Upload a small document to the `DocumentsBucketName` bucket.
-2. Watch the `IngestLambdaName` CloudWatch logs for a successful embed + pgvector
-   write.
-3. On failure, inspect the `IngestDlqUrl` queue.
-
-### 9.3 Verify Bedrock access
-
-From the functions sandbox or a minimal Lambda invocation, issue one `InvokeModel`
-call against each model. A `AccessDeniedException` means model access is still
-pending for that region.
-
-### 9.4 Warm-up
-
-The API container (once deployed) is intentionally **not** provisioned-concurrency
-warmed. After a deploy, issue one minimal request against a published chatbot
-endpoint and discard the result (see `apps/functions/README.md` runbook). A cold
-start + Bedrock first-token latency can breach the p95 budget on the first request.
+- **Browser must ride `localhost`**, never `127.0.0.1`: Next 16 dev
+  canonicalizes the origin to `http://localhost:3000`, and the `oauth_state`
+  cookie is host-bound. A `127.0.0.1` session strands the cookie →
+  callback fails with `?error=state_mismatch`.
+- **TLS**: the fake IdP is HTTPS with a self-signed cert. The web process needs
+  `NODE_EXTRA_CA_CERTS=/tmp/opencode/sandbox/fake-cognito-cert.pem` (BFF token
+  exchange + middleware JWKS fetch). Never use
+  `NODE_TLS_REJECT_UNAUTHORIZED=0`. curl needs `-k` on IdP hops.
+- One-time browser acceptance of the self-signed cert: "Avanzado → Continuar".
+- Embed pages: publish stamps `PUBLIC_CHAT_BASE_URL` — point it to
+  `http://localhost:3000/chat` for local iframe testing
+  (`apps/web/public/embed-test.html` is the harness).
+- floci cannot emulate Neon: ingest embeddings go to the **real** Neon dev
+  project (driver resolves `NEON_DATABASE_URL` directly in the sandbox).
+- Documents uploaded through the sandbox API stay `uploaded` forever (no
+  EventBridge in floci) — the ingest bot above is the trigger.
 
 ---
 
-## 10. Troubleshooting
+## 10. Post-deploy verification
+
+1. **Schema**: run the migration (§4) → printed verification lists the 3 indexes.
+2. **SSM**: the parameter exists and the value uses the pooled endpoint.
+3. **Ingest**: upload a document to `DocumentsBucketName` → the
+   `IngestLambdaName` logs show `ingest:document:ready` with
+   `inserted_count > 0`; failures land in `IngestDlqUrl`.
+4. **Dedupe**: re-upload the same file → same `chunk_count`, `inserted_count 0`
+   (unique `content_sha256`).
+5. **Bedrock**: one `InvokeModel` per model; `AccessDeniedException` means
+   model access is still pending (§2.4).
+6. **Identity**: Cognito hosted UI renders; a login round-trip reaches
+   `${origin}/api/auth/callback` without `?error=...`.
+7. **Warm-up**: first request after deploy pays Neon autosuspend + Lambda cold
+   start; issue a throwaway request against a published chatbot first.
+
+---
+
+## 11. Troubleshooting
 
 | Symptom | Cause / fix |
 | --- | --- |
-| `cdk synth` fails with VPC lookup error | No default VPC or no AWS creds — pass explicit `-c vpcId=... -c privateSubnetIds=... -c availabilityZones=...` |
-| `CouldNotDetermineEngineForProxyTarget` at synth | Proxy enabled on CDK 2.266.0 — keep `skipProxy=true` |
-| `CognitoUserPoolConstruct: adminAllowlist is required for prod` | Deploying with `-c envName=prod` — wire a real allowlist first |
-| Bedrock `AccessDeniedException` | Model access not granted in region — §2.3 |
-| `ThrottlingException` under load | Bedrock `InvokeModel` quota (~25–50 req/s default) — request a quota increase in Service Quotas |
-| Route not mounted at API boot | Missing env var — check `apps/functions/README.md` table |
-| `credentials` not found during deploy | `aws configure` or export `AWS_*` env vars |
+| Callback `?error=state_mismatch` | Origin mismatch: access the app at the same host the BFF canonicalizes (`localhost`), or re-register Cognito callback URLs |
+| `RetrievalError db_error` on chat | Neon URL not resolvable: check `NEON_URL_PARAMETER_NAME` env and the SSM parameter value |
+| First query very slow | Neon autosuspend wake-up (free plan) — §2.3 |
+| Ingest `Unknown compression method in flate stream` | Fixed (2026-09-08): PDFs parse via `unpdf`; if you see it, an old build is deployed |
+| Ingest rows land with `inserted_count: 0` | Dedupe: identical `(chatbot_id, content_sha256)` already present — expected |
+| Bedrock `AccessDeniedException` | Model access not granted in region (§2.4) |
+| Bedrock `ThrottlingException` | ~25–50 req/s default quota — request an increase |
+| Route not mounted at API boot | Missing env var; the server logs the warning at boot |
+| Prod Cognito deploy throws | `adminAllowlist` is `[]` — wire a real allowlist first |
+| floci tables missing | Run the sandbox setup/seed scripts (§9) before starting the API |
